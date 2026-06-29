@@ -10,8 +10,8 @@ import { searchStatus } from '../../../../services/search-status.service';
 import { resumeStateService } from '../../../../services/resume-state.service';
 import { extractEmailsFromHtml } from '../../../../utils/email-extract';
 import { buildMapsSearchQuery } from '../../../../utils/location-query-builder';
+import { NavigationEngine, NavigationInput, PageState } from '../../navigation/navigation-engine';
 
-const NAV_TIMEOUT = 45000;
 const DETAIL_TIMEOUT = 45000;
 const BATCH_FLUSH_SIZE = 25;
 const BATCH_FLUSH_INTERVAL_MS = 2000;
@@ -86,6 +86,7 @@ interface ProfilingTiming {
 }
 
 export class GoogleMapsScraper {
+  private navigationEngine = new NavigationEngine();
   getProfile(): ProfilingSnapshot[] { return this.lastProfile; }
   private lastProfile: ProfilingSnapshot[] = [];
 
@@ -157,110 +158,99 @@ export class GoogleMapsScraper {
       searchPage = acquired.page;
       profiling.pageLoadMs = Date.now() - profiling.browserStart;
 
-      await this.warmupPage(searchPage);
+      const navInput: NavigationInput = {
+        keyword: businessType || keyword,
+        area: area || '',
+        city: city || '',
+        state: state || '',
+        country: country || 'india',
+      };
 
-      await searchPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-      const gotoMs = Date.now() - profiling.browserStart - profiling.pageLoadMs;
+      let navResult = await this.navigationEngine.navigateToResults(searchPage, navInput);
 
-      profiling.feedReadyMs = Date.now() - profiling.browserStart;
+      if (!navResult.success && navResult.pageState === PageState.SIGN_IN) {
+        await browserManager.release(searchPage, 'google-maps');
+        searchPage = null;
 
-      let blockInfo = await this.detectBlocking(searchPage);
+        const MAX_SIGNIN_RETRIES = 3;
+        let signinSuccess = false;
 
-      if (blockInfo.blocked) {
-        await this.captureDebugEvidence(searchPage, `blocked-${blockInfo.type}`, blockInfo);
+        for (let attempt = 1; attempt <= MAX_SIGNIN_RETRIES; attempt++) {
+          logger.warn({
+            attempt, maxRetries: MAX_SIGNIN_RETRIES,
+          }, `GoogleMaps: SIGN_IN detected — retry ${attempt}/${MAX_SIGNIN_RETRIES}`);
 
-        if (blockInfo.type === 'SIGN_IN') {
-          await browserManager.release(searchPage, 'google-maps');
-          searchPage = null;
+          const retryCountry = options.country || country || 'united states';
+          const fresh = await browserManager.acquireForCountry('google-maps-retry', retryCountry);
+          searchPage = fresh.page;
 
-          const MAX_SIGNIN_RETRIES = 3;
-          let signinSuccess = false;
+          await this.warmupPage(searchPage);
 
-          for (let attempt = 1; attempt <= MAX_SIGNIN_RETRIES; attempt++) {
-            logger.warn({
-              attempt, maxRetries: MAX_SIGNIN_RETRIES,
-            }, `GoogleMaps: SIGN_IN detected — retry ${attempt}/${MAX_SIGNIN_RETRIES}`);
+          try {
+            await searchPage.context().clearCookies();
+            await searchPage.evaluate(() => {
+              try { localStorage.clear(); } catch {}
+              try { sessionStorage.clear(); } catch {}
+            }).catch(() => {});
+          } catch {}
 
-            const retryCountry = options.country || country || 'united states';
-            const fresh = await browserManager.acquireForCountry('google-maps-retry', retryCountry);
-            searchPage = fresh.page;
-
-            await this.warmupPage(searchPage);
-
-            try {
-              await searchPage.context().clearCookies();
-              await searchPage.evaluate(() => {
-                try { localStorage.clear(); } catch {}
-                try { sessionStorage.clear(); } catch {}
-              }).catch(() => {});
-            } catch {}
-
-            await searchPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-
-            const checkInfo = await this.detectBlocking(searchPage);
-            if (!checkInfo.blocked) {
-              logger.info({ attempt }, 'GoogleMaps: SIGN_IN retry succeeded');
-              signinSuccess = true;
-              break;
-            }
-
-            await this.captureDebugEvidence(searchPage, `signin-retry-${attempt}`, checkInfo);
-
-            if (attempt < MAX_SIGNIN_RETRIES) {
-              await browserManager.release(searchPage, 'google-maps');
-              searchPage = null;
-              await new Promise(r => setTimeout(r, 2000));
-            }
+          navResult = await this.navigationEngine.navigateToResults(searchPage, navInput);
+          if (navResult.success) {
+            logger.info({ attempt }, 'GoogleMaps: SIGN_IN retry succeeded via Navigation Engine');
+            signinSuccess = true;
+            break;
           }
 
-          if (!signinSuccess) {
-            if (searchPage) {
-              await this.captureScreenshot(searchPage, 'blocked-signin-final', { ...blockInfo, type: 'SIGN_IN' });
-              await browserManager.release(searchPage, 'google-maps');
-              searchPage = null;
-            }
-            return this.blockedResult({ ...blockInfo, type: 'SIGN_IN' });
+          await this.captureDebugEvidence(searchPage, `signin-retry-${attempt}`, {
+            blocked: true, type: 'SIGN_IN', url: navResult.url, title: navResult.failureReason || 'Sign-in',
+          });
+
+          if (attempt < MAX_SIGNIN_RETRIES) {
+            await browserManager.release(searchPage, 'google-maps');
+            searchPage = null;
+            await new Promise(r => setTimeout(r, 2000));
           }
-        } else if (blockInfo.type === 'CONSENT') {
-          logger.warn({}, 'GoogleMaps: Consent page detected — accepting');
-          await this.dismissConsent(searchPage);
-          await searchPage.waitForTimeout(1500);
-          const postConsent = await this.detectBlocking(searchPage);
-          if (postConsent.blocked) {
-            await this.captureDebugEvidence(searchPage, 'blocked-after-consent', postConsent);
-            return this.blockedResult(postConsent);
+        }
+
+        if (!signinSuccess) {
+          if (searchPage) {
+            await this.captureScreenshot(searchPage, 'blocked-signin-final', {
+              blocked: true, type: 'SIGN_IN', url: navResult.url, title: navResult.failureReason || 'Sign-in',
+            });
+            await browserManager.release(searchPage, 'google-maps');
+            searchPage = null;
           }
-        } else {
-          return this.blockedResult(blockInfo);
+          return this.blockedResult({ blocked: true, type: 'SIGN_IN', url: navResult.url, title: navResult.failureReason || 'Sign-in required' });
         }
       }
 
-      if (!searchPage) return { success: false, message: 'Lost search page after blocking check', totalExtracted: 0, totalStored: 0, totalDuplicates: 0, leads: [], sourceResults: [{ source: 'google-maps', totalStored: 0, totalExtracted: 0, totalDuplicates: 0, success: false, error: 'Lost search page' }] };
-
-      await this.dismissConsent(searchPage);
-
-      const navResult = await this.verifyMapsNavigationWithStrategies(searchPage, searchQuery, keyword, options);
       if (!navResult.success) {
-        await this.captureScreenshot(searchPage, 'navigation-verify-failed', {
-          blocked: false, type: 'NAV_VERIFY_FAIL', url: navResult.url, title: navResult.title,
-        });
+        if (searchPage) {
+          await this.captureScreenshot(searchPage, 'navigation-engine-failed', {
+            blocked: true, type: String(navResult.pageState), url: navResult.url,
+            title: navResult.failureReason || 'Navigation Engine failed',
+          });
+        }
         logger.warn({
           country, state, city, area,
           keyword: businessType || keyword,
           searchQuery,
-          searchUrl,
-          pageState: navResult.reason,
+          pageState: navResult.pageState,
           pageUrl: navResult.url,
-          pageTitle: navResult.title,
-          cookieHandled: navResult.cookieHandled,
-          captchaDetected: navResult.captchaDetected,
-        }, 'GoogleMaps: Navigation failed — runtime report');
+          failureReason: navResult.failureReason,
+          strategyUsed: navResult.strategyUsed,
+        }, 'GoogleMaps: Navigation Engine failed');
         return {
-          success: false, message: `Google Maps navigation verification failed: ${navResult.reason}`,
+          success: false, message: `Google Maps navigation failed: ${navResult.failureReason || navResult.pageState}`,
           totalExtracted: 0, totalStored: 0, totalDuplicates: 0, leads: [],
-          sourceResults: [{ source: 'google-maps', totalStored: 0, totalExtracted: 0, totalDuplicates: 0, success: false, error: `Navigation failed: ${navResult.reason}` }],
+          sourceResults: [{ source: 'google-maps', totalStored: 0, totalExtracted: 0, totalDuplicates: 0, success: false, error: `Navigation failed: ${navResult.failureReason || navResult.pageState}` }],
         };
       }
+
+      if (!searchPage) {
+        return { success: false, message: 'Lost search page after navigation', totalExtracted: 0, totalStored: 0, totalDuplicates: 0, leads: [], sourceResults: [{ source: 'google-maps', totalStored: 0, totalExtracted: 0, totalDuplicates: 0, success: false, error: 'Lost search page' }] };
+      }
+
       profiling.feedReadyMs = Date.now() - profiling.browserStart;
       logger.info({
         country: country || 'india',
@@ -269,15 +259,13 @@ export class GoogleMapsScraper {
         area: area || '',
         keyword: businessType || keyword,
         searchQuery,
-        searchUrl,
-        pageState: 'RESULTS_FEED',
+        pageState: navResult.pageState,
         pageUrl: navResult.url,
-        pageTitle: navResult.title,
-        cookieHandled: navResult.cookieHandled,
-        captchaDetected: false,
-        cardsFound: navResult.cardsCount,
+        cardsFound: navResult.businessCards,
         strategyUsed: navResult.strategyUsed,
-      }, 'GoogleMaps: Navigation verified — runtime report');
+        tld: navResult.tld,
+        countryName: navResult.countryName,
+      }, 'GoogleMaps: Navigation verified via Navigation Engine');
 
       await reportStage('collecting', `Collecting ${context.keyword} listings...`);
 
@@ -328,7 +316,6 @@ export class GoogleMapsScraper {
       };
       logger.info({
         browserAcquireMs: profiling.pageLoadMs,
-        gotoMs,
         feedReadyMs: profiling.feedReadyMs,
         firstScrollMs: profiling.firstScrollMs,
         firstCardMs: profiling.firstCardMs,
@@ -1092,58 +1079,6 @@ export class GoogleMapsScraper {
     }
   }
 
-  private async dismissConsent(page: Page): Promise<boolean> {
-    try {
-      const acceptSelectors = [
-        'button:has-text("Accept all")',
-        'button:has-text("Accept All")',
-        'button[aria-label*="Accept all"]',
-        'form button:has-text("Accept all")',
-        'div[role="dialog"] button:has-text("Accept all")',
-        'button:has-text("I agree")',
-        'button:has-text("I Agree")',
-        'button:has-text("Got it")',
-        'button[aria-label*="Accept all cookies"]',
-        'button:has-text("Accept cookies")',
-        'button:has-text("Agree")',
-        'button:has-text("Alle akzeptieren")',
-        'button:has-text("Tout accepter")',
-        'button:has-text("Accepter tout")',
-        'button:has-text("Aceptar todo")',
-        'button:has-text("Accetta tutto")',
-        'button:has-text("Alle accepteren")',
-        'button:has-text("Acceptera alla")',
-        'button:has-text("Akzeptieren")',
-        'button:has-text("Accepteer alles")',
-        '[aria-label="Accept all"]',
-        '[aria-label="Accept All"]',
-        'button[jsname]:has-text("Accept")',
-      ];
-      for (const sel of acceptSelectors) {
-        const btn = await page.$(sel).catch(() => null);
-        if (btn) {
-          await btn.click().catch(() => {});
-          await page.waitForTimeout(1000);
-          return true;
-        }
-      }
-      const oldSelectors = [
-        'div[role="dialog"] button:has-text("Accept")',
-        '#consent button',
-        'button[aria-label*="Close"]',
-      ];
-      for (const sel of oldSelectors) {
-        const btn = await page.$(sel).catch(() => null);
-        if (btn) {
-          await btn.click().catch(() => {});
-          await page.waitForTimeout(1000);
-          return true;
-        }
-      }
-      return false;
-    } catch { return false; }
-  }
-
   private async captureDebugEvidence(page: Page, label: string, info: BlockInfo): Promise<void> {
     try {
       ensureDebugDir();
@@ -1222,155 +1157,6 @@ export class GoogleMapsScraper {
       const text = main.textContent || '';
       return !!title && (!!metadata || links > 1) && text.length > 300;
     }, { timeout: timeoutMs });
-  }
-
-  private async waitForFeed(page: Page): Promise<boolean> {
-    try {
-      await page.waitForSelector('[role="feed"]', { timeout: 8000 });
-      const hasChildren = await page.evaluate(() => {
-        const f = document.querySelector('[role="feed"]');
-        return f ? f.children.length > 0 : false;
-      }).catch(() => false);
-      if (hasChildren) return true;
-      await page.waitForFunction(() => {
-        const f = document.querySelector('[role="feed"]');
-        return f && f.children.length > 0;
-      }, { timeout: 10000 });
-      return true;
-    } catch {
-      const cards = await page.$$('a[href*="maps/place/"]').catch(() => []);
-      return cards.length > 0;
-    }
-  }
-
-  private async verifyMapsNavigationWithStrategies(
-    page: Page,
-    searchQuery: string,
-    keyword: string,
-    options: ScraperOptions & { semanticKeyword?: string },
-  ): Promise<{
-    success: boolean; reason: string; url: string; title: string;
-    searchBoxFound: boolean; feedFound: boolean; cardsFound: boolean; cardsCount: number;
-    cookieHandled: boolean; captchaDetected: boolean; strategyUsed: string;
-  }> {
-    const { area: _area, city, state, country } = options;
-    let cookieHandled = false;
-    let captchaDetected = false;
-
-    const tryGetFeed = async (): Promise<{ success: boolean; url: string; title: string; cardsCount: number }> => {
-      const url = page.url();
-      const title = await page.title().catch(() => '');
-
-      if (!url.includes('google.com/maps')) {
-        return { success: false, url, title, cardsCount: 0 };
-      }
-
-      const dismissed = await this.dismissConsent(page);
-      if (dismissed) {
-        cookieHandled = true;
-        await page.waitForTimeout(1500);
-      }
-
-      const blockCheck = await this.detectBlocking(page);
-      if (blockCheck.blocked && (blockCheck.type === 'CAPTCHA' || blockCheck.type === 'RATE_LIMITED')) {
-        captchaDetected = true;
-        return { success: false, url, title: blockCheck.title, cardsCount: 0 };
-      }
-
-      const feedReady = await this.waitForFeed(page);
-      if (feedReady) {
-        const cards = await page.$$('a[href*="maps/place/"]').catch(() => []);
-        return { success: true, url: page.url(), title: await page.title().catch(() => title), cardsCount: cards.length };
-      }
-      return { success: false, url: page.url(), title: await page.title().catch(() => title), cardsCount: 0 };
-    };
-
-    const baseResult = { searchBoxFound: false, feedFound: false, cardsFound: false };
-
-    logger.info({ strategy: 1, searchQuery, url: page.url() }, 'GoogleMaps: Strategy 1 — direct URL result check');
-    const s1 = await tryGetFeed();
-    if (s1.success) {
-      return { ...baseResult, success: true, reason: '', url: s1.url, title: s1.title, feedFound: true, cardsFound: s1.cardsCount > 0, cardsCount: s1.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'direct-url' };
-    }
-    if (captchaDetected) {
-      return { ...baseResult, success: false, reason: 'CAPTCHA detected', url: s1.url, title: s1.title, cardsCount: 0, cookieHandled, captchaDetected, strategyUsed: 'direct-url' };
-    }
-
-    logger.info({ strategy: 2, searchQuery }, 'GoogleMaps: Strategy 2 — type into search box');
-    const typed = await this.trySearchInput(page, searchQuery);
-    if (typed) {
-      const s2 = await tryGetFeed();
-      if (s2.success) {
-        return { ...baseResult, success: true, reason: '', url: s2.url, title: s2.title, feedFound: true, cardsFound: s2.cardsCount > 0, cardsCount: s2.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'search-box' };
-      }
-    }
-
-    logger.info({ strategy: 3, searchQuery }, 'GoogleMaps: Strategy 3 — re-navigate with same query');
-    try {
-      const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-      const s3 = await tryGetFeed();
-      if (s3.success) {
-        return { ...baseResult, success: true, reason: '', url: s3.url, title: s3.title, feedFound: true, cardsFound: s3.cardsCount > 0, cardsCount: s3.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'retry-same-url' };
-      }
-      if (captchaDetected) {
-        return { ...baseResult, success: false, reason: 'CAPTCHA detected on retry', url: s3.url, title: s3.title, cardsCount: 0, cookieHandled, captchaDetected, strategyUsed: 'retry-same-url' };
-      }
-    } catch { }
-
-    const simpleParts = [city, state, country].filter(Boolean);
-    if (simpleParts.length > 0) {
-      const simpleQuery = `${keyword} in ${simpleParts.join(', ')}`;
-      if (simpleQuery !== searchQuery) {
-        logger.info({ strategy: 4, simpleQuery }, 'GoogleMaps: Strategy 4 — query without area');
-        try {
-          const simpleUrl = `https://www.google.com/maps/search/${encodeURIComponent(simpleQuery)}`;
-          await page.goto(simpleUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-          const s4 = await tryGetFeed();
-          if (s4.success) {
-            return { ...baseResult, success: true, reason: '', url: s4.url, title: s4.title, feedFound: true, cardsFound: s4.cardsCount > 0, cardsCount: s4.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'no-area' };
-          }
-        } catch { }
-      }
-    }
-
-    const minimalParts = [city || state, country].filter(Boolean);
-    if (minimalParts.length > 0) {
-      const minimalQuery = `${keyword} in ${minimalParts.join(', ')}`;
-      if (minimalQuery !== searchQuery) {
-        logger.info({ strategy: 5, minimalQuery }, 'GoogleMaps: Strategy 5 — keyword + city/state + country only');
-        try {
-          const minimalUrl = `https://www.google.com/maps/search/${encodeURIComponent(minimalQuery)}`;
-          await page.goto(minimalUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-          const s5 = await tryGetFeed();
-          if (s5.success) {
-            return { ...baseResult, success: true, reason: '', url: s5.url, title: s5.title, feedFound: true, cardsFound: s5.cardsCount > 0, cardsCount: s5.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'minimal-query' };
-          }
-        } catch { }
-      }
-    }
-
-    const finalUrl = page.url();
-    const finalTitle = await page.title().catch(() => '');
-    await this.captureDebugEvidence(page, 'all-strategies-failed', {
-      blocked: false, type: 'ALL_STRATEGIES_FAILED', url: finalUrl, title: finalTitle,
-    });
-    return { ...baseResult, success: false, reason: 'All 5 search strategies exhausted', url: finalUrl, title: finalTitle, cardsCount: 0, cookieHandled, captchaDetected, strategyUsed: 'none' };
-  }
-
-  private async trySearchInput(page: Page, searchQuery: string): Promise<boolean> {
-    try {
-      const input = await page.$('input#searchboxinput');
-      if (!input) return false;
-      await input.click();
-      await input.fill('');
-      await page.keyboard.type(searchQuery, { delay: 10 + Math.random() * 20 });
-      await page.keyboard.press('Enter');
-      try {
-        await page.waitForSelector('[role="feed"], a[href*="maps/place/"]', { timeout: 3000 });
-        return true;
-      } catch { return false; }
-    } catch { return false; }
   }
 
   private async getFeedMetrics(page: Page): Promise<FeedMetrics> {

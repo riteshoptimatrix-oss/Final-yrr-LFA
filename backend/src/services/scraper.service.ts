@@ -3,8 +3,9 @@ import { LeadData } from '../source-core/base-source';
 import type { SourceQuery } from './search-query-builder';
 import { logger } from '../utils/logger';
 import { buildMapsSearchQuery } from '../utils/location-query-builder';
+import { getSourcesForCountry, validateSources, mergeEngine, backgroundEnrichmentWorker, isIndiaCountry } from '../multi-source';
 
-export const DEFAULT_SEARCH_SOURCES = ['google-maps', 'justdial', 'indiamart'] as const;
+export const DEFAULT_SEARCH_SOURCES = ['google-maps', 'justdial', 'indiamart', 'clutch', 'official-website'] as const;
 
 export interface ScrapeOptions {
   keyword: string;
@@ -75,17 +76,25 @@ export class ScraperService {
 
     const { searchQuery } = buildMapsSearchQuery(businessType || keyword, { area, city, state, country, location });
 
+    const resolvedSources = validateSources(
+      sources.length > 0 ? sources : getSourcesForCountry(country),
+      country
+    );
+
     logger.info({
       action: 'search_started',
-      keyword, area, city, state, country, sources, limit, sessionId,
+      keyword, area, city, state, country,
+      sources: resolvedSources,
+      limit, sessionId,
       searchQuery, skipSearchTracking,
+      countrySourceRouting: isIndiaCountry(country) ? 'india' : 'international',
     }, `[SCRAPER_SERVICE] Starting scrape for "${keyword}" in ${[area, city, state, country].filter(Boolean).join(', ') || location}`);
 
     try {
       const result = await scraperEngine.scrapeMultiSource({
         keyword,
         location,
-        sources: sources.length > 0 ? sources : [...DEFAULT_SEARCH_SOURCES],
+        sources: resolvedSources,
         limit,
         state,
         city,
@@ -101,6 +110,24 @@ export class ScraperService {
 
       const leads: LeadData[] = result.leads.map(toLeadData);
 
+      const mergedLeads = mergeEngine.merge(leads);
+
+      const enrichmentTasks: Array<{ leadId: string; source: string; keyword: string }> = [];
+
+      for (const mergedLead of mergedLeads) {
+        if (mergedLead.id && mergedLead.id.length > 0) {
+          enrichmentTasks.push({
+            leadId: mergedLead.id,
+            source: mergedLead.mergedSources?.join(',') || mergedLead.source,
+            keyword: keyword,
+          });
+        }
+      }
+
+      if (enrichmentTasks.length > 0) {
+        backgroundEnrichmentWorker.enqueueBatch(enrichmentTasks);
+      }
+
       const resultsMap: Record<string, { totalExtracted: number; totalStored: number; totalDuplicates: number }> = {};
       for (const sr of result.sourceResults) {
         resultsMap[sr.source] = {
@@ -115,7 +142,8 @@ export class ScraperService {
         totalExtracted: result.totalExtracted,
         totalStored: result.totalStored,
         totalDuplicates: result.totalDuplicates,
-        sources: sources.length,
+        uniqueMergedLeads: mergedLeads.length,
+        sources: resolvedSources.length,
         keyword, area, city, state, country,
         success: result.success,
         errorCount: result.errors?.length || 0,
@@ -134,7 +162,7 @@ export class ScraperService {
         totalExtracted: result.totalExtracted,
         totalStored: result.totalStored,
         totalDuplicates: result.totalDuplicates,
-        leads,
+        leads: mergedLeads,
         errors: result.errors ? result.errors.map(e => ({ source: e.source, keyword: e.keyword, error: e.error })) : undefined,
       };
     } catch (error: unknown) {
@@ -142,7 +170,7 @@ export class ScraperService {
       logger.error({
         action: 'search_failed',
         err: message, keyword, area, city, state, country,
-      }, `[SCRAPER_SERVICE] ${'(╯°□°)╯︵ ┻━┻'} Scrape threw exception: ${message}`);
+      }, `[SCRAPER_SERVICE] Scrape threw exception: ${message}`);
       return {
         success: false,
         message: `Scraper service error: ${message}`,

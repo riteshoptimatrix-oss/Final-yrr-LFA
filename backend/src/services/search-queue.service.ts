@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { SearchState } from '../automation/search-state-machine';
 import { FilterQuery } from 'mongoose';
 import { buildLocationString } from '../utils/location-query-builder';
+import { PipelineStage, createPipeline, startStage, completeStage, failStage } from '../recovery';
 
 const TABLE_FLIP = '(╯°□°)╯︵ ┻━┻';
 
@@ -167,6 +168,9 @@ class SearchQueueService {
       searchStatus.setState(sessionId, SearchState.STARTING_BROWSER);
       searchStatus.addLog(sessionId, '[PLAYWRIGHT_START] Starting browser...', 'info');
 
+      createPipeline(sessionId, options.keyword);
+      startStage(sessionId, PipelineStage.EXTRACTION);
+
       if (this.isStopRequested(sessionId)) return;
 
       searchStatus.setState(sessionId, SearchState.BROWSER_READY);
@@ -210,6 +214,9 @@ class SearchQueueService {
       searchStatus.setState(sessionId, SearchState.SCRAPING_RESULTS);
       searchStatus.addLog(sessionId, `[RESULTS_FOUND] Scraping complete. ${result.totalExtracted} found, ${result.totalStored} saved`, 'info');
 
+      completeStage(sessionId, PipelineStage.EXTRACTION);
+      startStage(sessionId, PipelineStage.MONGODB);
+
       if (this.isStopRequested(sessionId)) return;
 
       searchStatus.setState(sessionId, SearchState.PROCESSING_RESULTS);
@@ -224,6 +231,7 @@ class SearchQueueService {
         if (isNoResults) {
           logger.info({ sessionId, message: failureMessage }, `[SEARCH_QUEUE] No results found`);
           searchStatus.addLog(sessionId, `[NO_RESULTS] ${failureMessage}`, 'warn');
+          failStage(sessionId, PipelineStage.EXTRACTION, failureMessage);
           await searchStatus.markNoResults(sessionId, failureMessage);
           return;
         }
@@ -242,6 +250,7 @@ class SearchQueueService {
         } else {
           await searchStatus.markFailed(sessionId, failureMessage);
         }
+        failStage(sessionId, PipelineStage.EXTRACTION, failureMessage);
         return;
       }
 
@@ -256,6 +265,8 @@ class SearchQueueService {
       logger.info({ sessionId, stored: result.totalStored, elapsed }, `[SEARCH_QUEUE] [SEARCH_COMPLETED] Job completed in ${elapsed}ms`);
 
       await searchStatus.markCompleted(sessionId, completedSources, failedSources);
+
+      completeStage(sessionId, PipelineStage.MONGODB);
 
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -280,6 +291,7 @@ class SearchQueueService {
       } else {
         await searchStatus.markFailed(sessionId, message);
       }
+      failStage(sessionId, PipelineStage.EXTRACTION, message);
     } finally {
       this.activeSessions.delete(sessionId);
       this.stopRequested.delete(sessionId);

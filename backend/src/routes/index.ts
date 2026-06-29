@@ -34,6 +34,7 @@ import adminRoute from './admin.route';
 import locationRoute from './location.route';
 import adminLocationRoute from './admin-location.route';
 import enrichmentRoute from './enrichment.route';
+import recoveryRoute from './recovery.route';
 
 const router = Router();
 
@@ -94,5 +95,6 @@ router.use('/migration', authenticate, migrationRoute);
 router.use('/email-discovery', authenticate, emailDiscoveryRoute);
 router.use('/locations', authenticate, locationRoute);
 router.use('/enrichment', authenticate, enrichmentRoute);
+router.use('/recovery', authenticate, recoveryRoute);
 
 export default router;

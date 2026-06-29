@@ -20,6 +20,8 @@ import { authService } from './services/auth.service';
 import { initSocketManager, getSocketIO } from './modules/automation-monitor/socket-manager';
 import { join } from 'path';
 import { aiProcessingQueue } from './services/ai-processing-queue.service';
+import { backgroundEnrichmentWorker } from './multi-source';
+import { recoveryOrchestrator } from './recovery/recovery-orchestrator';
 
 let isShuttingDown = false;
 let crashCount = 0;
@@ -642,11 +644,16 @@ const startServer = async (): Promise<void> => {
       }
     });
 
+    backgroundEnrichmentWorker.start();
+    recoveryOrchestrator.start();
+
     const shutdown = async (): Promise<void> => {
       if (isShuttingDown) return;
       isShuttingDown = true;
       logger.info('Shutting down server...');
       try {
+        backgroundEnrichmentWorker.stop();
+        recoveryOrchestrator.stop();
         await cronScheduler.stop();
         httpServer.close(() => {
           logger.info('HTTP server closed');

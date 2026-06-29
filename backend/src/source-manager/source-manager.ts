@@ -4,6 +4,7 @@ import { GoogleMapsSource } from '../sources/google-maps/scraper';
 import { JustdialSource } from '../sources/justdial/scraper';
 import { IndiaMartSource } from '../sources/indiamart/scraper';
 import { ClutchSource } from '../sources/clutch/scraper';
+import { OfficialWebsiteSource } from '../sources/official-website/scraper';
 import { scrapingProgress } from '../services/scraping-progress';
 import { searchQueryBuilder, SourceQuery } from '../services/search-query-builder';
 import { businessRelevanceValidator } from '../services/business-relevance-validator';
@@ -64,6 +65,7 @@ export class SourceManager {
     this.registerSource(new JustdialSource());
     this.registerSource(new IndiaMartSource());
     this.registerSource(new ClutchSource());
+    this.registerSource(new OfficialWebsiteSource());
   }
 
   isSearchActive(): boolean {

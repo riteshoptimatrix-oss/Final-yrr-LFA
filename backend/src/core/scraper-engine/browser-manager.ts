@@ -31,10 +31,12 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
 ];
 
-const STEALTH_SCRIPT = `
+function buildStealthScript(langs: string[]): string {
+  const langsJson = JSON.stringify(langs);
+  return `
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 Object.defineProperty(navigator, 'plugins', { get: () => [] });
-Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en-GB', 'en', 'hi'] });
+Object.defineProperty(navigator, 'languages', { get: () => ${langsJson} });
 Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
 Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
 Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 0 });
@@ -57,6 +59,8 @@ window.chrome.app = window.chrome.app || { isInstalled: false };
 window.chrome.loadTimes = window.chrome.loadTimes || function() {};
 window.chrome.csi = window.chrome.csi || function() {};
 `;
+}
+
 
 const BLOCKED_RESOURCE_TYPES = new Set([
   'image', 'media', 'font', 'imageset', 'beacon', 'csp_report', 'ping',
@@ -137,7 +141,27 @@ const countryLocationMap: Record<string, { lat: number; lng: number; tz: string;
   pakistan: { lat: 24.8607, lng: 67.0011, tz: 'Asia/Karachi', locale: 'en-PK', lang: 'en-PK,en;q=0.9,ur;q=0.8' },
   nepal: { lat: 27.7172, lng: 85.324, tz: 'Asia/Kathmandu', locale: 'ne-NP', lang: 'ne-NP,ne;q=0.9,en;q=0.8' },
   'sri lanka': { lat: 6.9271, lng: 79.8612, tz: 'Asia/Colombo', locale: 'si-LK', lang: 'si-LK,si;q=0.9,en;q=0.8' },
+  dubai: { lat: 25.2048, lng: 55.2708, tz: 'Asia/Dubai', locale: 'en-AE', lang: 'en-AE,en;q=0.9,ar;q=0.8' },
+  'united arab emirates': { lat: 25.2048, lng: 55.2708, tz: 'Asia/Dubai', locale: 'en-AE', lang: 'en-AE,en;q=0.9,ar;q=0.8' },
+  uk: { lat: 51.5074, lng: -0.1278, tz: 'Europe/London', locale: 'en-GB', lang: 'en-GB,en;q=0.9' },
+  usa: { lat: 40.7128, lng: -74.006, tz: 'America/New_York', locale: 'en-US', lang: 'en-US,en;q=0.9' },
 };
+
+const countryAliases: Record<string, string> = {
+  uk: 'united kingdom',
+  usa: 'united states',
+  us: 'united states',
+  uae: 'uae',
+  dubai: 'uae',
+  'united arab emirates': 'uae',
+  emirates: 'uae',
+};
+
+function resolveCountryProfile(country: string) {
+  const key = country.toLowerCase().trim();
+  const mapped = countryAliases[key] || key;
+  return countryLocationMap[mapped] || countryLocationMap[key];
+}
 
 export class BrowserManager {
   private browser: Browser | null = null;
@@ -209,7 +233,8 @@ export class BrowserManager {
   }
 
   async acquireForCountry(sourceName: string, country: string): Promise<{ page: Page; browser: Browser; context: BrowserContext }> {
-    const loc = countryLocationMap[country.toLowerCase()] || { lat: 40.7128, lng: -74.006, tz: 'America/New_York', locale: 'en-US', lang: 'en-US,en;q=0.9' };
+    const loc = resolveCountryProfile(country) || { lat: 40.7128, lng: -74.006, tz: 'America/New_York', locale: 'en-US', lang: 'en-US,en;q=0.9' };
+    const stealthScript = buildStealthScript(loc.lang.split(',').map(l => l.split(';')[0].trim()));
     const unlock = await this.lock();
     try {
       const browser = await this.ensureBrowserLocked();
@@ -230,7 +255,7 @@ export class BrowserManager {
         bypassCSP: true,
         extraHTTPHeaders: { 'Accept-Language': loc.lang },
       });
-      await ctx.addInitScript(STEALTH_SCRIPT);
+      await ctx.addInitScript(stealthScript);
       const page = await ctx.newPage();
       page.setDefaultTimeout(PAGE_TIMEOUT_MS);
       page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
@@ -246,11 +271,15 @@ export class BrowserManager {
     }
   }
 
-  async acquireMultiple(sourceName: string, count: number): Promise<{ page: Page; browser: Browser; context: BrowserContext }[]> {
+  async acquireMultiple(sourceName: string, count: number, country?: string): Promise<{ page: Page; browser: Browser; context: BrowserContext }[]> {
     const pages: { page: Page; browser: Browser; context: BrowserContext }[] = [];
     try {
       for (let i = 0; i < count; i++) {
-        pages.push(await this.acquire(`${sourceName}-${i}`));
+        if (country) {
+          pages.push(await this.acquireForCountry(`${sourceName}-${i}`, country));
+        } else {
+          pages.push(await this.acquire(`${sourceName}-${i}`));
+        }
       }
     } catch (err) {
       for (const p of pages) {
@@ -462,10 +491,10 @@ export class BrowserManager {
         timeout: BROWSER_LAUNCH_TIMEOUT_MS,
         viewport: { width: 1920, height: 1080 },
         ignoreHTTPSErrors: true,
-        locale: 'en-IN',
-        timezoneId: 'Asia/Kolkata',
+        locale: 'en-US',
+        timezoneId: 'America/New_York',
         userAgent: USER_AGENTS[this.userAgentIndex++ % USER_AGENTS.length],
-        geolocation: { latitude: 23.0225, longitude: 72.5714 },
+        geolocation: { latitude: 40.7128, longitude: -74.006 },
         permissions: ['geolocation'],
         deviceScaleFactor: 1,
         screen: { width: 1920, height: 1080 },
@@ -473,10 +502,11 @@ export class BrowserManager {
         reducedMotion: 'no-preference',
         forcedColors: 'none',
         bypassCSP: true,
-        extraHTTPHeaders: { 'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8,hi;q=0.7' },
+        extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
       });
       const launchedBrowser = browserContext.browser();
       if (!launchedBrowser) throw new Error('BrowserManager: No browser associated with persistent context');
+      await browserContext.addInitScript(buildStealthScript(['en-US', 'en']));
       launchedBrowser.on('disconnected', () => {
         logger.warn({}, 'BrowserManager: Browser disconnected');
         this.browser = null;
@@ -517,16 +547,20 @@ export class BrowserManager {
     throw new Error(`BrowserManager: All ${MAX_CONTEXTS} contexts at capacity (${this.totalPagesCreated - this.totalPagesClosed}/${MAX_TOTAL_PAGES} pages)`);
   }
 
-  private async createContextLocked(): Promise<ManagedContext> {
+  private async createContextLocked(country?: string): Promise<ManagedContext> {
     if (!this.browser) throw new Error('BrowserManager: No browser');
     const ua = USER_AGENTS[this.userAgentIndex++ % USER_AGENTS.length];
+    const loc = country
+      ? (resolveCountryProfile(country) || { lat: 40.7128, lng: -74.006, tz: 'America/New_York', locale: 'en-US', lang: 'en-US,en;q=0.9' })
+      : { lat: 23.0225, lng: 72.5714, tz: 'Asia/Kolkata', locale: 'en-IN', lang: 'en-IN,en-GB;q=0.9,en;q=0.8,hi;q=0.7' };
+    const stealthScript = buildStealthScript(loc.lang.split(',').map(l => l.split(';')[0].trim()));
     const context = await this.browser.newContext({
       viewport: { width: 1920, height: 1080 },
       userAgent: ua,
-      locale: 'en-IN',
-      timezoneId: 'Asia/Kolkata',
+      locale: loc.locale,
+      timezoneId: loc.tz,
       ignoreHTTPSErrors: true,
-      geolocation: { latitude: 23.0225, longitude: 72.5714 },
+      geolocation: { latitude: loc.lat, longitude: loc.lng },
       permissions: ['geolocation'],
       deviceScaleFactor: 1,
       screen: { width: 1920, height: 1080 },
@@ -535,15 +569,15 @@ export class BrowserManager {
       forcedColors: 'none',
       bypassCSP: true,
       extraHTTPHeaders: {
-        'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8,hi;q=0.7',
+        'Accept-Language': loc.lang,
       },
     });
 
-    await context.addInitScript(STEALTH_SCRIPT);
+    await context.addInitScript(stealthScript);
 
     const managed: ManagedContext = { context, pages: new Set(), lastUsed: Date.now() };
     this.contexts.push(managed);
-    logger.debug({ totalContexts: this.contexts.length }, 'BrowserManager: Context created');
+    logger.debug({ totalContexts: this.contexts.length, country: country || 'india' }, 'BrowserManager: Context created');
     return managed;
   }
 

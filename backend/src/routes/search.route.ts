@@ -12,6 +12,7 @@ import { searchStatus } from '../services/search-status.service';
 import { searchQueue } from '../services/search-queue.service';
 import { DEFAULT_SEARCH_SOURCES } from '../services/scraper.service';
 import { SearchState } from '../automation/search-state-machine';
+import { buildLocationString } from '../utils/location-query-builder';
 
 const router = Router();
 
@@ -248,8 +249,8 @@ router.post(
   '/',
   validate(searchRequestSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const scrapeLimit = req.body.limit || 50;
-    const maxResults = req.body.maxResults || 0;
+    const scrapeLimit = req.body.limit ?? 0;
+    const maxResults = req.body.maxResults ?? 0;
     const { keyword, location, state, city, area, country, sources, businessType } = req.body;
 
     if (!keyword) {
@@ -258,13 +259,7 @@ router.post(
 
     const sessionId = req.body.sessionId || searchStatus.generateSessionId();
 
-    let locationString = location || '';
-    if (state && city) {
-      locationString = area ? `${area}, ${city}, ${state}` : `${city}, ${state}`;
-    }
-    if (country) {
-      locationString = locationString ? `${locationString}, ${country}` : country;
-    }
+    const locationString = buildLocationString({ area, city, state, country, location });
 
     if (country && country.trim() && !process.env.NODE_ENV?.includes('prod')) {
       const countryRecord = await Country.findOne({

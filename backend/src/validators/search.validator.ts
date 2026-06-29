@@ -10,7 +10,7 @@ export const searchRequestSchema = z.object({
     country: z.string().optional(),
     businessType: z.string().optional(),
     sources: z.array(z.string()).optional(),
-    limit: z.number().optional().default(1000),
+    limit: z.number().optional().default(0),
     sessionId: z.string().optional(),
     semanticExpansion: z.boolean().optional(),
     maxResults: z.number().optional(),

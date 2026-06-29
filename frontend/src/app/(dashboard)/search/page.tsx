@@ -32,6 +32,7 @@ import { useSearchAlertStore } from "@/store/useSearchAlertStore";
 import { useSearchSocket } from "@/hooks/useSearchSocket";
 import { scraperService } from "@/services/scraper.service";
 import { leadService } from "@/services/lead.service";
+import { buildLocationString } from "@/utils/location-query-builder";
 import { SearchHistory } from "@/components/search/search-history";
 import { LeadLocationSummary } from "@/components/search/lead-location-summary";
 import type { ScrapingProgressData, SemanticQueryProgress } from "@/services/scraper.service";
@@ -117,9 +118,16 @@ export default function SearchPage() {
     e.preventDefault();
     if (!keyword.trim() || isLoading || isSuccess) return;
 
-    let locationString = "";
-    if (state && city) {
-      locationString = area ? `${area}, ${city}, ${state}` : `${city}, ${state}`;
+    const locationString = buildLocationString({
+      area: area || undefined,
+      city: city || undefined,
+      state: state || undefined,
+      country: country || undefined,
+    });
+
+    if (!locationString) {
+      toast.error("Please select a country and city before searching.");
+      return;
     }
 
     reset();

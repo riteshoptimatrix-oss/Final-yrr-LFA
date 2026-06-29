@@ -28,9 +28,9 @@ export class LeadNormalizer {
     if (!name) return '';
     let normalized = name.trim();
     normalized = normalized.replace(/\s+/g, ' ');
-    normalized = normalized.replace(/[^\w\s&.,'-]/g, '');
+    normalized = normalized.replace(/[^\p{L}\p{N}\s&.,'-]/gu, '');
     const words = ['the', 'a', 'an', 'pvt', 'ltd', 'limited', 'private', 'llp', 'inc'];
-    const wordRegex = new RegExp(`\\b(${words.join('|')})\\b`, 'gi');
+    const wordRegex = new RegExp(`\\b(${words.join('|')})\\b`, 'giu');
     normalized = normalized.replace(wordRegex, (match) => match.toLowerCase());
     return normalized;
   }
@@ -38,12 +38,11 @@ export class LeadNormalizer {
   normalizePhone(phone?: string): string | undefined {
     if (!phone) return undefined;
     let cleaned = phone.replace(/[\s\-().]/g, '');
-    cleaned = cleaned.replace(/^(?:\+?91)?(\d{10})$/, (_, d) => d);
+    if (cleaned.startsWith('+')) {
+      const digits = cleaned.slice(1).replace(/[^\d]/g, '');
+      return digits.length >= 8 ? `+${digits}` : undefined;
+    }
     const digits = cleaned.replace(/[^\d]/g, '');
-    if (digits.length === 10 && digits.startsWith('0')) return digits.slice(1);
-    if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
-    if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
-    if (digits.length === 13 && digits.startsWith('+91')) return digits.slice(3);
     if (digits.length >= 10) return digits;
     return undefined;
   }
@@ -69,22 +68,33 @@ export class LeadNormalizer {
 
   getDedupKey(lead: ScraperLead): string[] {
     const keys: string[] = [];
-    if (lead.phone && lead.phone.length >= 10) {
-      keys.push(`phone:${lead.phone}`);
-    }
-    if (lead.website) {
-      keys.push(`website:${lead.website}`);
-    }
     if (lead.placeId) {
       keys.push(`placeId:${lead.placeId}`);
     }
     if (lead.sourceUrl) {
       keys.push(`sourceUrl:${lead.sourceUrl}`);
     }
+    if (lead.href && lead.href !== lead.sourceUrl) {
+      keys.push(`sourceUrl:${lead.href}`);
+    }
+    if (lead.latitude !== undefined && lead.longitude !== undefined) {
+      keys.push(`coords:${lead.latitude.toFixed(5)},${lead.longitude.toFixed(5)}`);
+    }
+    if (lead.phone && lead.phone.length >= 8) {
+      keys.push(`phone:${lead.phone}`);
+    }
+    if (lead.website) {
+      keys.push(`website:${lead.website}`);
+    }
     if (lead.companyName) {
       const name = lead.companyName.toLowerCase().replace(/\s+/g, '');
-      const city = (lead.city || '').toLowerCase().replace(/\s+/g, '');
-      keys.push(`name:${name}|${city}`);
+      const address = (lead.address || '').toLowerCase().replace(/\s+/g, '');
+      if (address) {
+        keys.push(`nameaddr:${name}|${address}`);
+      } else {
+        const city = (lead.city || '').toLowerCase().replace(/\s+/g, '');
+        keys.push(`name:${name}|${city}`);
+      }
     }
     return keys;
   }

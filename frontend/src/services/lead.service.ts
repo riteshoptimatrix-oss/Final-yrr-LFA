@@ -100,9 +100,9 @@ export class LeadService {
         state: filters.state,
         city: filters.city,
         area: filters.area,
+        country: filters.country,
         businessType: filters.businessType || filters.keyword,
         sources: filters.sources || ['google-maps'],
-        limit: 50,
         sessionId: filters.sessionId,
         semanticExpansion: filters.semanticExpansion !== false,
       },
@@ -114,7 +114,7 @@ export class LeadService {
   async getLeads(params?: Record<string, string | undefined>): Promise<PaginatedLeadsResponse> {
     const queryParts: string[] = [];
     const filterParams = [
-      'page', 'limit', 'search', 'keyword', 'location',
+      'page', 'limit', 'search', 'keyword', 'location', 'country',
       'state', 'city', 'area', 'businessType', 'category', 'source',
       'hasWebsite', 'hasPhone', 'hasEmail', 'socialOnly', 'verifiedOnly',
       'hasWhatsApp', 'websiteType', 'status', 'quality',
@@ -455,6 +455,55 @@ export class LeadService {
     };
 
     return normalized;
+  }
+
+  // ── Enrichment API methods ──
+
+  async enrichLead(leadId: string): Promise<Record<string, unknown>> {
+    const response = await apiClient.post(`/enrichment/leads/${leadId}/enrich`);
+    return response.data;
+  }
+
+  async getEnrichmentStatus(leadId: string): Promise<Record<string, unknown>> {
+    const response = await apiClient.get(`/enrichment/leads/${leadId}/status`);
+    return response.data;
+  }
+
+  async enqueueLead(leadId: string): Promise<Record<string, unknown>> {
+    const response = await apiClient.post(`/enrichment/leads/${leadId}/enqueue`);
+    return response.data;
+  }
+
+  async startBackfill(options?: {
+    batchSize?: number;
+    concurrency?: number;
+    skipCompleted?: boolean;
+    limit?: number;
+  }): Promise<Record<string, unknown>> {
+    const response = await apiClient.post('/enrichment/backfill/start', options || {});
+    return response.data;
+  }
+
+  async getBackfillStatus(): Promise<Record<string, unknown>> {
+    const response = await apiClient.get('/enrichment/backfill/status');
+    return response.data;
+  }
+
+  async getEnrichableLeads(params?: Record<string, string>): Promise<Record<string, unknown>> {
+    const queryParts: string[] = [];
+    if (params) {
+      for (const [key, val] of Object.entries(params)) {
+        if (val) queryParts.push(`${key}=${encodeURIComponent(val)}`);
+      }
+    }
+    const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    const response = await apiClient.get(`/enrichment/leads${query}`);
+    return response.data;
+  }
+
+  async getOrchestratorStatus(): Promise<Record<string, unknown>> {
+    const response = await apiClient.get('/enrichment/status');
+    return response.data;
   }
 }
 

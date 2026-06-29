@@ -814,9 +814,59 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
             value={l.address}
           />
           <DetailRowWithFallback
+            icon={<MapPin className="h-4 w-4" />}
+            label="Street Address"
+            value={l.streetAddress}
+          />
+          <DetailRowWithFallback
+            icon={<Map className="h-4 w-4" />}
+            label="Area"
+            value={l.searchedArea || (l.sourceMetadata?.searchedArea as string)}
+          />
+          <DetailRowWithFallback
+            icon={<Map className="h-4 w-4" />}
+            label="City"
+            value={l.searchedCity || (l.sourceMetadata?.searchedCity as string)}
+          />
+          <DetailRowWithFallback
+            icon={<Map className="h-4 w-4" />}
+            label="State"
+            value={l.searchedState || (l.sourceMetadata?.searchedState as string)}
+          />
+          <DetailRowWithFallback
+            icon={<Map className="h-4 w-4" />}
+            label="Country"
+            value={l.searchedCountry || (l.sourceMetadata?.searchedCountry as string)}
+          />
+          <DetailRowWithFallback
             icon={<Building2 className="h-4 w-4" />}
             label="Category"
             value={l.category}
+          />
+          <DetailRowWithFallback
+            icon={<Layers className="h-4 w-4" />}
+            label="Secondary Categories"
+            value={l.secondaryCategories?.join(', ')}
+          />
+          <DetailRowWithFallback
+            icon={<Eye className="h-4 w-4" />}
+            label="Photos Count"
+            value={l.totalPhotos !== undefined ? String(l.totalPhotos) : undefined}
+          />
+          <DetailRowWithFallback
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            label="Service Options"
+            value={l.serviceOptions?.join(', ')}
+          />
+          <DetailRowWithFallback
+            icon={<Shield className="h-4 w-4" />}
+            label="Owner Claimed"
+            value={l.ownerClaimed !== undefined ? (l.ownerClaimed ? 'Yes' : 'No') : undefined}
+          />
+          <DetailRowWithFallback
+            icon={<Hash className="h-4 w-4" />}
+            label="Place ID"
+            value={l.placeId}
           />
           {l.leadScore !== undefined ? (
             <div className="flex items-start gap-3 py-2.5 border-b border-border/40">
@@ -850,6 +900,11 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
             icon={<Calendar className="h-4 w-4" />}
             label="Created"
             value={formatDate(l.createdAt)}
+          />
+          <DetailRowWithFallback
+            icon={<Calendar className="h-4 w-4" />}
+            label="Last Updated"
+            value={formatDate(l.updatedAt)}
           />
           <DetailRowWithFallback
             icon={<Search className="h-4 w-4" />}
@@ -931,13 +986,11 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
                   value={l.websiteMetadata.cms}
                 />
               )}
-              {l.websiteMetadata?.httpsEnabled !== undefined && (
-                <DetailRowWithFallback
-                  icon={<Lock className="h-4 w-4" />}
-                  label="HTTPS"
-                  value={l.websiteMetadata.httpsEnabled ? 'Enabled' : 'Not Enabled'}
-                />
-              )}
+              <DetailRowWithFallback
+                icon={<Lock className="h-4 w-4" />}
+                label="SSL Status"
+                value={l.websiteMetadata?.httpsEnabled !== undefined ? (l.websiteMetadata.httpsEnabled ? 'HTTPS' : 'HTTP') : l.sslEnabled !== undefined ? (l.sslEnabled ? 'HTTPS' : 'HTTP') : undefined}
+              />
               {l.websiteMetadata?.title && (
                 <DetailRowWithFallback
                   icon={<FileText className="h-4 w-4" />}
@@ -1004,7 +1057,7 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
                   value={l.websiteQuality.issues.join(', ')}
                 />
               )}
-              {(l.socialLinks?.facebook || l.socialLinks?.instagram || l.socialLinks?.linkedin || l.socialLinks?.youtube || l.socialLinks?.twitter || l.socialLinks?.pinterest) && (
+              {(l.socialLinks?.facebook || l.socialLinks?.instagram || l.socialLinks?.linkedin || l.socialLinks?.youtube || l.socialLinks?.twitter || l.socialLinks?.pinterest || l.socialLinks?.whatsapp) && (
                 <div className="flex items-start gap-3 py-2.5 border-b border-border/40">
                   <div className="shrink-0 mt-0.5 text-muted-foreground">
                     <Globe className="h-4 w-4" />
@@ -1030,7 +1083,45 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
                       {l.socialLinks.pinterest && (
                         <a href={l.socialLinks.pinterest} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Pinterest</a>
                       )}
+                      {l.socialLinks.whatsapp && (
+                        <a href={l.socialLinks.whatsapp} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">WhatsApp</a>
+                      )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {l.enrichmentStatus && (
+                <div className="flex items-start gap-3 py-2.5 border-b border-border/40">
+                  <div className="shrink-0 mt-0.5 text-muted-foreground">
+                    <Activity className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrichment Status</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant={
+                        l.enrichmentStatus === 'completed' ? 'default' :
+                        l.enrichmentStatus === 'running' ? 'secondary' :
+                        l.enrichmentStatus === 'failed' ? 'destructive' : 'outline'
+                      } className="text-[10px]">
+                        {l.enrichmentStatus}
+                      </Badge>
+                      {l.enrichmentStatus === 'running' && l.enrichmentProgress !== undefined && (
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 text-blue-500 animate-spin" />
+                          <span className="text-[10px] text-muted-foreground">{l.enrichmentProgress}%</span>
+                        </div>
+                      )}
+                      {l.enrichmentCurrentStep && (
+                        <span className="text-[10px] text-muted-foreground">{l.enrichmentCurrentStep}</span>
+                      )}
+                    </div>
+                    {l.enrichmentError && (
+                      <p className="text-[10px] text-red-500 mt-1">{l.enrichmentError}</p>
+                    )}
+                    {l.enrichmentCompletedAt && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Completed: {formatDate(l.enrichmentCompletedAt)}</p>
+                    )}
                   </div>
                 </div>
               )}

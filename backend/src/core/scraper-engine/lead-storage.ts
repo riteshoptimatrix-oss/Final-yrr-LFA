@@ -4,6 +4,7 @@ import { ScraperLead } from './types';
 import { leadNormalizer } from './lead-normalizer';
 import { searchStatus } from '../../services/search-status.service';
 import { leadEnrichmentPipeline } from '../../services/lead-enrichment-pipeline.service';
+import { leadEnrichmentOrchestrator } from '../../enrichment';
 import { monitorEngine } from '../../modules/automation-monitor/monitor-engine';
 
 export interface StorageResult {
@@ -18,6 +19,7 @@ export interface StorageContext {
   area?: string;
   city?: string;
   state?: string;
+  country?: string;
   businessType: string;
   fullSearchQuery?: string;
   semanticKeyword?: string;
@@ -197,7 +199,16 @@ export class LeadStorage {
             if (doc.website) existingLeadSet.add(`website:${doc.website}`);
             if (doc.sourceUrl) existingLeadSet.add(`sourceUrl:${doc.sourceUrl}`);
             if ((doc as any).sourceMetadata?.placeId) existingLeadSet.add(`placeId:${(doc as any).sourceMetadata.placeId}`);
-            if (doc.companyName) existingLeadSet.add(`name:${doc.companyName.toLowerCase().replace(/\s+/g, '')}`);
+            if ((doc as any).latitude !== undefined && (doc as any).longitude !== undefined) {
+              existingLeadSet.add(`coords:${Number((doc as any).latitude).toFixed(5)},${Number((doc as any).longitude).toFixed(5)}`);
+            }
+            if (doc.companyName && doc.address) {
+              const name = doc.companyName.toLowerCase().replace(/\s+/g, '');
+              const addr = doc.address.toLowerCase().replace(/\s+/g, '');
+              existingLeadSet.add(`nameaddr:${name}|${addr}`);
+            } else if (doc.companyName) {
+              existingLeadSet.add(`name:${doc.companyName.toLowerCase().replace(/\s+/g, '')}|`);
+            }
           }
         } catch (err) {
           logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'LeadStorage: Bulk duplicate check failed, falling back');
@@ -325,6 +336,7 @@ export class LeadStorage {
             }
           }
           leadEnrichmentPipeline.enqueueMultiple(leadIds);
+          leadEnrichmentOrchestrator.enqueueMultiple(leadIds);
         } else if ((inserted as any).length > 0) {
           for (let i = 0; i < totalStored; i++) {
             if (context.sessionId) {
@@ -384,6 +396,25 @@ export class LeadStorage {
     }
     if (key.startsWith('sourceUrl:')) {
       return { sourceUrl: key.replace('sourceUrl:', '') };
+    }
+    if (key.startsWith('nameaddr:')) {
+      const payload = key.replace('nameaddr:', '');
+      const [namePart, addrPart] = payload.split('|');
+      return {
+        companyName: { $regex: new RegExp(`^${namePart}$`, 'i') },
+        address: { $regex: new RegExp(addrPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+      };
+    }
+    if (key.startsWith('coords:')) {
+      const [latStr, lngStr] = key.replace('coords:', '').split(',');
+      const lat = parseFloat(latStr);
+      const lng = parseFloat(lngStr);
+      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+        return {
+          latitude: { $gte: lat - 0.0001, $lte: lat + 0.0001 },
+          longitude: { $gte: lng - 0.0001, $lte: lng + 0.0001 },
+        };
+      }
     }
     if (key.startsWith('name:')) {
       const parts = key.replace('name:', '').split('|');

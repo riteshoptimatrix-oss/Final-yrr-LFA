@@ -33,6 +33,7 @@ import debugRoute from './debug.route';
 import adminRoute from './admin.route';
 import locationRoute from './location.route';
 import adminLocationRoute from './admin-location.route';
+import enrichmentRoute from './enrichment.route';
 
 const router = Router();
 
@@ -92,5 +93,6 @@ router.use('/search-analytics', authenticate, searchAnalyticsRoute);
 router.use('/migration', authenticate, migrationRoute);
 router.use('/email-discovery', authenticate, emailDiscoveryRoute);
 router.use('/locations', authenticate, locationRoute);
+router.use('/enrichment', authenticate, enrichmentRoute);
 
 export default router;

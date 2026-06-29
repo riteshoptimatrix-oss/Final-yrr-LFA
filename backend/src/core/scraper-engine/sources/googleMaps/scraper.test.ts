@@ -17,6 +17,13 @@ vi.mock('../../lead-storage', () => ({
   leadStorage: { storeLeads: vi.fn(), enrichLeads: vi.fn() },
 }));
 
+vi.mock('path', () => ({ resolve: vi.fn(), join: vi.fn() }));
+vi.mock('fs', () => ({
+  existsSync: vi.fn().mockReturnValue(true),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}));
+
 import { GoogleMapsScraper } from './scraper';
 
 function mockPage(overrides: Record<string, unknown> = {}) {

@@ -121,6 +121,31 @@ export function getCitiesOfState(countryCode: string, stateCode: string): Geogra
   return mapped;
 }
 
+export function getCitiesOfCountry(countryCode: string): GeographyCity[] {
+  const cacheKey = `${countryCode.toUpperCase()}-__COUNTRY__`;
+  const cached = citiesCache.get(cacheKey);
+  if (cached) return cached;
+  const raw = City.getCitiesOfCountry(countryCode);
+  if (!raw || raw.length === 0) return [];
+  const seen = new Set<string>();
+  const mapped = raw
+    .filter((c) => {
+      const key = c.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((c) => ({
+      _id: `${c.name}-${c.stateCode || 'NA'}`,
+      name: c.name,
+      countryCode: c.countryCode,
+      stateCode: c.stateCode || '',
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  citiesCache.set(cacheKey, mapped);
+  return mapped;
+}
+
 const areasCache = new Map<string, GeographyArea[]>();
 const cityCoordsCache = new Map<string, { lat: number; lon: number }>();
 let currentAreaController: AbortController | null = null;
@@ -206,10 +231,11 @@ export async function searchAreas(
   }
 
   if (!query || query.trim().length < 3) return [];
-  if (!countryName || !stateName || !cityName) return [];
+  if (!countryName || !cityName) return [];
 
   const trimmed = query.trim();
-  const cacheKey = `${trimmed}|${countryName}|${stateName}|${cityName}`.toLowerCase();
+  const statePart = stateName || '';
+  const cacheKey = `${trimmed}|${countryName}|${statePart}|${cityName}`.toLowerCase();
   const cached = areasCache.get(cacheKey);
   if (cached) return cached;
 
@@ -219,7 +245,7 @@ export async function searchAreas(
   const { signal } = currentAreaController;
 
   const iso2 = countryIso2 || getCountryIso2(countryName);
-  const coords = await getCityCoordinates(cityName, stateName, countryName);
+  const coords = await getCityCoordinates(cityName, statePart || cityName, countryName);
 
   const params = new URLSearchParams();
   params.set('text', trimmed);

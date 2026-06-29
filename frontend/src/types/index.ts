@@ -70,6 +70,22 @@ export interface Lead {
   websiteStatus: WebsiteStatus;
   leadScore: number;
 
+  // Enrichment Pipeline status fields
+  enrichmentStatus?: 'pending' | 'running' | 'completed' | 'failed';
+  enrichmentStartedAt?: string;
+  enrichmentCompletedAt?: string;
+  enrichmentError?: string;
+  enrichmentProgress?: number;
+  enrichmentCurrentStep?: string;
+
+  // Full address fields
+  streetAddress?: string;
+  secondaryCategories?: string[];
+  totalPhotos?: number;
+  serviceOptions?: string[];
+  ownerClaimed?: boolean;
+  placeId?: string;
+
   // AI Pipeline status fields
   aiStatus?: 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
   aiProgress?: number;

@@ -2,6 +2,7 @@ import { scraperEngine } from '../core/scraper-engine/scraper-engine';
 import { LeadData } from '../source-core/base-source';
 import type { SourceQuery } from './search-query-builder';
 import { logger } from '../utils/logger';
+import { buildMapsSearchQuery } from '../utils/location-query-builder';
 
 export const DEFAULT_SEARCH_SOURCES = ['google-maps', 'justdial', 'indiamart'] as const;
 
@@ -70,9 +71,9 @@ function toLeadData(lead: any): LeadData {
 
 export class ScraperService {
   async scrapeBusinesses(options: ScrapeOptions): Promise<ScrapeResult> {
-    const { keyword, location, sources = [], limit = 1000, state, city, area, country, businessType, sessionId, skipSearchTracking, isCancelled, maxResults, resumeSessionId } = options;
+    const { keyword, location, sources = [], limit = 0, state, city, area, country, businessType, sessionId, skipSearchTracking, isCancelled, maxResults, resumeSessionId } = options;
 
-    const searchQuery = `${businessType || keyword} in ${[area, city, state, country].filter(Boolean).join(' ')}`.trim();
+    const { searchQuery } = buildMapsSearchQuery(businessType || keyword, { area, city, state, country, location });
 
     logger.info({
       action: 'search_started',

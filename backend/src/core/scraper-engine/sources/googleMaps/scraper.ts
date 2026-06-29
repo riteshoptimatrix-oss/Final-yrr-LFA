@@ -9,6 +9,7 @@ import type { ScraperLead, ScraperResult, ScrapeContext, ScraperOptions } from '
 import { searchStatus } from '../../../../services/search-status.service';
 import { resumeStateService } from '../../../../services/resume-state.service';
 import { extractEmailsFromHtml } from '../../../../utils/email-extract';
+import { buildMapsSearchQuery } from '../../../../utils/location-query-builder';
 
 const NAV_TIMEOUT = 45000;
 const DETAIL_TIMEOUT = 45000;
@@ -19,11 +20,26 @@ const DEFAULT_WORKERS = 5;
 const MAX_END_REPEATS = 8;
 const RESUME_SAVE_INTERVAL = 25;
 const PROGRESS_REPORT_INTERVAL_MS = 1500;
-const MAX_SCROLL_ATTEMPTS = 50;
 const SCROLL_PAUSE_MS = 2000;
-const SCROLL_INCREMENT_PX = 600;
-const MIN_SCROLL_STEP = 200;
-const MAX_SCROLL_STEP = 1200;
+const SCROLL_SAFETY_CAP = 10000;
+const IDLE_SCROLL_END_THRESHOLD = 15;
+
+const END_OF_LIST_PATTERNS = [
+  /reached the end|end of the list|no more results|that's all|you.?ve reached the end/i,
+  /fin de la liste|plus de r[eé]sultats|vous avez atteint la fin/i,
+  /ende der liste|keine weiteren ergebnisse|listenende/i,
+  /fine dell.?elenco|non ci sono altri risultati|fine dei risultati/i,
+  /リストの末尾|これ以上結果|リストの終わり/i,
+  /목록의 끝|더 이상 결과|목록 끝/i,
+  /fim da lista|n[aã]o h[aá] mais resultados/i,
+  /конец списка|больше нет результатов/i,
+  /نهاية القائمة|لا مزيد من النتائج|انتهت القائمة/i,
+  /列表结束|没有更多结果|已到达列表末尾/i,
+];
+
+function isEndOfListText(text: string): boolean {
+  return END_OF_LIST_PATTERNS.some(pattern => pattern.test(text));
+}
 
 interface BlockInfo {
   blocked: boolean;
@@ -88,7 +104,9 @@ export class GoogleMapsScraper {
       return { success: false, message: 'Invalid keyword', totalExtracted: 0, totalStored: 0, totalDuplicates: 0, leads: [], sourceResults: [] };
     }
 
-    const searchQuery = `${businessType || keyword} in ${[area, city, state, country, location].filter(Boolean).join(' ')}`;
+    const { searchQuery } = buildMapsSearchQuery(businessType || keyword, {
+      area, city, state, country, location,
+    });
     const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
     logger.info({ searchQuery, searchUrl, country, state, city, area, businessType: businessType || keyword }, 'GoogleMaps: Search query generated');
     this.lastActiveOptions = options;
@@ -163,7 +181,7 @@ export class GoogleMapsScraper {
               attempt, maxRetries: MAX_SIGNIN_RETRIES,
             }, `GoogleMaps: SIGN_IN detected — retry ${attempt}/${MAX_SIGNIN_RETRIES}`);
 
-            const retryCountry = options.country || 'india';
+            const retryCountry = options.country || country || 'united states';
             const fresh = await browserManager.acquireForCountry('google-maps-retry', retryCountry);
             searchPage = fresh.page;
 
@@ -221,27 +239,49 @@ export class GoogleMapsScraper {
 
       await this.dismissConsent(searchPage);
 
-      const navVerified = await this.verifyMapsNavigation(searchPage, searchQuery);
-      if (!navVerified.success) {
+      const navResult = await this.verifyMapsNavigationWithStrategies(searchPage, searchQuery, keyword, options);
+      if (!navResult.success) {
         await this.captureScreenshot(searchPage, 'navigation-verify-failed', {
-          blocked: false, type: 'NAV_VERIFY_FAIL', url: navVerified.url, title: navVerified.title,
+          blocked: false, type: 'NAV_VERIFY_FAIL', url: navResult.url, title: navResult.title,
         });
+        logger.warn({
+          country, state, city, area,
+          keyword: businessType || keyword,
+          searchQuery,
+          searchUrl,
+          pageState: navResult.reason,
+          pageUrl: navResult.url,
+          pageTitle: navResult.title,
+          cookieHandled: navResult.cookieHandled,
+          captchaDetected: navResult.captchaDetected,
+        }, 'GoogleMaps: Navigation failed — runtime report');
         return {
-          success: false, message: `Google Maps navigation verification failed: ${navVerified.reason}`,
+          success: false, message: `Google Maps navigation verification failed: ${navResult.reason}`,
           totalExtracted: 0, totalStored: 0, totalDuplicates: 0, leads: [],
-          sourceResults: [{ source: 'google-maps', totalStored: 0, totalExtracted: 0, totalDuplicates: 0, success: false, error: `Navigation failed: ${navVerified.reason}` }],
+          sourceResults: [{ source: 'google-maps', totalStored: 0, totalExtracted: 0, totalDuplicates: 0, success: false, error: `Navigation failed: ${navResult.reason}` }],
         };
       }
       profiling.feedReadyMs = Date.now() - profiling.browserStart;
       logger.info({
-        mapsUrl: navVerified.url, searchBoxFound: navVerified.searchBoxFound,
-        feedFound: navVerified.feedFound, cardsFound: navVerified.cardsFound,
-        cardsCount: navVerified.cardsCount,
-      }, 'GoogleMaps: Navigation verified');
+        country: country || 'india',
+        state: state || '',
+        city: city || '',
+        area: area || '',
+        keyword: businessType || keyword,
+        searchQuery,
+        searchUrl,
+        pageState: 'RESULTS_FEED',
+        pageUrl: navResult.url,
+        pageTitle: navResult.title,
+        cookieHandled: navResult.cookieHandled,
+        captchaDetected: false,
+        cardsFound: navResult.cardsCount,
+        strategyUsed: navResult.strategyUsed,
+      }, 'GoogleMaps: Navigation verified — runtime report');
 
       await reportStage('collecting', `Collecting ${context.keyword} listings...`);
 
-      const detailPageResults = await browserManager.acquireMultiple('gm-detail', concurrency);
+      const detailPageResults = await browserManager.acquireMultiple('gm-detail', concurrency, country);
       detailPages = detailPageResults.map(r => r.page);
       profiling.firstScrollMs = Date.now() - profiling.browserStart;
 
@@ -304,9 +344,18 @@ export class GoogleMapsScraper {
       context.sessionId && searchStatus.addLog(context.sessionId, `Google Maps: ${totalExtracted} found, ${totalStored} saved`, 'info');
 
       logger.info({
-        keyword, totalExtracted, totalStored, totalDuplicates,
-        elapsedMs: Date.now() - profiling.browserStart,
-      }, 'GoogleMaps: Search finished');
+        country: country || 'india',
+        state: state || '',
+        city: city || '',
+        area: area || '',
+        keyword: businessType || keyword,
+        searchQuery,
+        searchUrl,
+        cardsFound: allScrapedNames.size,
+        businessesExtracted: cardQueue.length,
+        businessesSaved: totalStored,
+        failureReason: totalStored === 0 && totalExtracted > 0 ? 'all-duplicates' : totalStored === 0 ? 'no-results' : null,
+      }, 'GoogleMaps: Search finished — runtime report');
 
       return {
         success: totalStored > 0,
@@ -411,7 +460,8 @@ export class GoogleMapsScraper {
         });
       };
 
-      for (let scrollAttempt = 0; scrollAttempt < MAX_SCROLL_ATTEMPTS; scrollAttempt++) {
+      let scrollAttempt = 0;
+      for (scrollAttempt = 1; scrollAttempt <= SCROLL_SAFETY_CAP; scrollAttempt++) {
         if (this.isCancelled()) throw new Error('Scrape cancelled');
 
         if (scrollAttempt > 0 && scrollAttempt % 5 === 0) {
@@ -442,10 +492,14 @@ export class GoogleMapsScraper {
         let duplicatesInBatch = 0;
         const streamBatch: ScraperLead[] = [];
         for (const card of newCards) {
-          const dedupKey = `${card.companyName}|${card.address || ''}`;
-          if (allScrapedNames.has(dedupKey)) { duplicatesInBatch++; continue; }
+          const cardKey = card.placeId
+            ? `pid:${card.placeId}`
+            : card.href
+              ? `href:${card.href}`
+              : `name:${card.companyName}|${card.address || ''}`;
+          if (allScrapedNames.has(cardKey)) { duplicatesInBatch++; continue; }
           if (card.placeId && allScrapedPlaceIds.has(card.placeId)) { duplicatesInBatch++; continue; }
-          allScrapedNames.add(dedupKey);
+          allScrapedNames.add(cardKey);
           if (card.placeId) allScrapedPlaceIds.add(card.placeId);
           card.fullSearchQuery = context.fullSearchQuery;
           card.searchedKeyword = context.keyword;
@@ -532,11 +586,17 @@ export class GoogleMapsScraper {
 
         if (maxResults && maxResults > 0 && allScrapedNames.size >= maxResults) break;
 
-        if (consecutiveIdleScrolls >= 15) {
-          logger.info({ consecutiveIdleScrolls, found: allScrapedNames.size }, 'GoogleMaps: 15 consecutive idle scrolls — end of results');
+        if (consecutiveIdleScrolls >= IDLE_SCROLL_END_THRESHOLD) {
+          logger.info({ consecutiveIdleScrolls, found: allScrapedNames.size }, `GoogleMaps: ${IDLE_SCROLL_END_THRESHOLD} consecutive idle scrolls — end of results`);
           await onEndDetected?.();
           break;
         }
+
+        await new Promise<void>(resolve => setTimeout(resolve, SCROLL_PAUSE_MS));
+      }
+
+      if (scrollAttempt > SCROLL_SAFETY_CAP) {
+        logger.warn({ found: totalFoundThisSession, cap: SCROLL_SAFETY_CAP }, 'GoogleMaps: Scroll safety cap reached');
       }
 
     saveResumeState();
@@ -596,7 +656,10 @@ export class GoogleMapsScraper {
           const placeLinks = scrollEl.querySelectorAll('a[href*="maps/place/"]').length;
           const isEnd = !!(document.querySelector('.HlvXi, .PbZDve'));
           const bodyText = document.body?.innerText || '';
-          const endOfList = /reached the end|end of the list|no more results/i.test(bodyText);
+          const endPatterns = [
+            /reached the end|end of the list|no more results|fin de la liste|ende der liste|fine dell.?elenco|リストの末尾|목록의 끝|fim da lista|نهاية القائمة|列表结束/i,
+          ];
+          const endOfList = endPatterns.some((p) => p.test(bodyText));
           return childCount !== prev.childCount
             || placeLinks !== prev.placeLinkCount
             || isEnd || endOfList;
@@ -1042,6 +1105,19 @@ export class GoogleMapsScraper {
         'button:has-text("Got it")',
         'button[aria-label*="Accept all cookies"]',
         'button:has-text("Accept cookies")',
+        'button:has-text("Agree")',
+        'button:has-text("Alle akzeptieren")',
+        'button:has-text("Tout accepter")',
+        'button:has-text("Accepter tout")',
+        'button:has-text("Aceptar todo")',
+        'button:has-text("Accetta tutto")',
+        'button:has-text("Alle accepteren")',
+        'button:has-text("Acceptera alla")',
+        'button:has-text("Akzeptieren")',
+        'button:has-text("Accepteer alles")',
+        '[aria-label="Accept all"]',
+        '[aria-label="Accept All"]',
+        'button[jsname]:has-text("Accept")',
       ];
       for (const sel of acceptSelectors) {
         const btn = await page.$(sel).catch(() => null);
@@ -1167,42 +1243,119 @@ export class GoogleMapsScraper {
     }
   }
 
-  private async verifyMapsNavigation(page: Page, searchQuery: string): Promise<{
+  private async verifyMapsNavigationWithStrategies(
+    page: Page,
+    searchQuery: string,
+    keyword: string,
+    options: ScraperOptions & { semanticKeyword?: string },
+  ): Promise<{
     success: boolean; reason: string; url: string; title: string;
     searchBoxFound: boolean; feedFound: boolean; cardsFound: boolean; cardsCount: number;
+    cookieHandled: boolean; captchaDetected: boolean; strategyUsed: string;
   }> {
-    const url = page.url();
-    const title = await page.title().catch(() => '');
-    const base = { url, title, searchBoxFound: false, feedFound: false, cardsFound: false, cardsCount: 0 };
+    const { area: _area, city, state, country } = options;
+    let cookieHandled = false;
+    let captchaDetected = false;
 
-    if (!url.includes('google.com/maps')) {
-      return { ...base, success: false, reason: `Not on Google Maps: ${url}` };
+    const tryGetFeed = async (): Promise<{ success: boolean; url: string; title: string; cardsCount: number }> => {
+      const url = page.url();
+      const title = await page.title().catch(() => '');
+
+      if (!url.includes('google.com/maps')) {
+        return { success: false, url, title, cardsCount: 0 };
+      }
+
+      const dismissed = await this.dismissConsent(page);
+      if (dismissed) {
+        cookieHandled = true;
+        await page.waitForTimeout(1500);
+      }
+
+      const blockCheck = await this.detectBlocking(page);
+      if (blockCheck.blocked && (blockCheck.type === 'CAPTCHA' || blockCheck.type === 'RATE_LIMITED')) {
+        captchaDetected = true;
+        return { success: false, url, title: blockCheck.title, cardsCount: 0 };
+      }
+
+      const feedReady = await this.waitForFeed(page);
+      if (feedReady) {
+        const cards = await page.$$('a[href*="maps/place/"]').catch(() => []);
+        return { success: true, url: page.url(), title: await page.title().catch(() => title), cardsCount: cards.length };
+      }
+      return { success: false, url: page.url(), title: await page.title().catch(() => title), cardsCount: 0 };
+    };
+
+    const baseResult = { searchBoxFound: false, feedFound: false, cardsFound: false };
+
+    logger.info({ strategy: 1, searchQuery, url: page.url() }, 'GoogleMaps: Strategy 1 — direct URL result check');
+    const s1 = await tryGetFeed();
+    if (s1.success) {
+      return { ...baseResult, success: true, reason: '', url: s1.url, title: s1.title, feedFound: true, cardsFound: s1.cardsCount > 0, cardsCount: s1.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'direct-url' };
+    }
+    if (captchaDetected) {
+      return { ...baseResult, success: false, reason: 'CAPTCHA detected', url: s1.url, title: s1.title, cardsCount: 0, cookieHandled, captchaDetected, strategyUsed: 'direct-url' };
     }
 
-    const feedReady = await this.waitForFeed(page);
-    if (feedReady) {
-      const cards = await page.$$('a[href*="maps/place/"]').catch(() => []);
-      const feedFound = true;
-      const cardsFound = cards.length > 0;
-      logger.info({ url, title, cardsCount: cards.length }, 'GoogleMaps: Feed loaded with business cards');
-      return { ...base, success: true, reason: '', feedFound, cardsFound, cardsCount: cards.length };
+    logger.info({ strategy: 2, searchQuery }, 'GoogleMaps: Strategy 2 — type into search box');
+    const typed = await this.trySearchInput(page, searchQuery);
+    if (typed) {
+      const s2 = await tryGetFeed();
+      if (s2.success) {
+        return { ...baseResult, success: true, reason: '', url: s2.url, title: s2.title, feedFound: true, cardsFound: s2.cardsCount > 0, cardsCount: s2.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'search-box' };
+      }
     }
 
-    const searchLoaded = await this.trySearchInput(page, searchQuery);
-    if (searchLoaded) {
-      const cards = await page.$$('a[href*="maps/place/"]').catch(() => []);
-      const feedFound = true;
-      const cardsFound = cards.length > 0;
-      return { ...base, success: true, reason: '', feedFound, cardsFound, cardsCount: cards.length };
+    logger.info({ strategy: 3, searchQuery }, 'GoogleMaps: Strategy 3 — re-navigate with same query');
+    try {
+      const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+      const s3 = await tryGetFeed();
+      if (s3.success) {
+        return { ...baseResult, success: true, reason: '', url: s3.url, title: s3.title, feedFound: true, cardsFound: s3.cardsCount > 0, cardsCount: s3.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'retry-same-url' };
+      }
+      if (captchaDetected) {
+        return { ...baseResult, success: false, reason: 'CAPTCHA detected on retry', url: s3.url, title: s3.title, cardsCount: 0, cookieHandled, captchaDetected, strategyUsed: 'retry-same-url' };
+      }
+    } catch { }
+
+    const simpleParts = [city, state, country].filter(Boolean);
+    if (simpleParts.length > 0) {
+      const simpleQuery = `${keyword} in ${simpleParts.join(', ')}`;
+      if (simpleQuery !== searchQuery) {
+        logger.info({ strategy: 4, simpleQuery }, 'GoogleMaps: Strategy 4 — query without area');
+        try {
+          const simpleUrl = `https://www.google.com/maps/search/${encodeURIComponent(simpleQuery)}`;
+          await page.goto(simpleUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+          const s4 = await tryGetFeed();
+          if (s4.success) {
+            return { ...baseResult, success: true, reason: '', url: s4.url, title: s4.title, feedFound: true, cardsFound: s4.cardsCount > 0, cardsCount: s4.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'no-area' };
+          }
+        } catch { }
+      }
     }
 
-    const searchBox = await page.$('input#searchboxinput').catch(() => null);
-    const searchBoxFound = searchBox !== null;
-    if (searchBoxFound) {
-      return { ...base, success: false, reason: 'Search box present but search execution failed', searchBoxFound: true };
+    const minimalParts = [city || state, country].filter(Boolean);
+    if (minimalParts.length > 0) {
+      const minimalQuery = `${keyword} in ${minimalParts.join(', ')}`;
+      if (minimalQuery !== searchQuery) {
+        logger.info({ strategy: 5, minimalQuery }, 'GoogleMaps: Strategy 5 — keyword + city/state + country only');
+        try {
+          const minimalUrl = `https://www.google.com/maps/search/${encodeURIComponent(minimalQuery)}`;
+          await page.goto(minimalUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+          const s5 = await tryGetFeed();
+          if (s5.success) {
+            return { ...baseResult, success: true, reason: '', url: s5.url, title: s5.title, feedFound: true, cardsFound: s5.cardsCount > 0, cardsCount: s5.cardsCount, cookieHandled, captchaDetected, strategyUsed: 'minimal-query' };
+          }
+        } catch { }
+      }
     }
 
-    return { ...base, success: false, reason: 'Neither search box nor results feed found', searchBoxFound };
+    const finalUrl = page.url();
+    const finalTitle = await page.title().catch(() => '');
+    await this.captureDebugEvidence(page, 'all-strategies-failed', {
+      blocked: false, type: 'ALL_STRATEGIES_FAILED', url: finalUrl, title: finalTitle,
+    });
+    return { ...baseResult, success: false, reason: 'All 5 search strategies exhausted', url: finalUrl, title: finalTitle, cardsCount: 0, cookieHandled, captchaDetected, strategyUsed: 'none' };
   }
 
   private async trySearchInput(page: Page, searchQuery: string): Promise<boolean> {
@@ -1222,12 +1375,11 @@ export class GoogleMapsScraper {
 
   private async getFeedMetrics(page: Page): Promise<FeedMetrics> {
     try {
-      return await page.evaluate(() => {
+      const bodyText = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
+      const metrics = await page.evaluate(() => {
         const feed = document.querySelector('[role="feed"]');
         const main = document.querySelector('div[role="main"]');
         const scrollEl = feed || main;
-        const bodyText = document.body?.innerText || '';
-        const endOfListText = /reached the end|end of the list|no more results/i.test(bodyText);
         const endOfListVisible = !!(document.querySelector('.HlvXi, .PbZDve'));
         const placeLinks = scrollEl
           ? Array.from(scrollEl.querySelectorAll('a[href*="maps/place/"]'))
@@ -1239,9 +1391,12 @@ export class GoogleMapsScraper {
           scrollHeight: scrollEl ? (scrollEl as HTMLElement).scrollHeight : document.body.scrollHeight,
           clientHeight: scrollEl ? (scrollEl as HTMLElement).clientHeight : window.innerHeight,
           endOfListVisible,
-          endOfListText,
         };
       });
+      return {
+        ...metrics,
+        endOfListText: isEndOfListText(bodyText),
+      };
     } catch {
       return { childCount: 0, placeLinkCount: 0, scrollTop: 0, scrollHeight: 0, clientHeight: 0, endOfListVisible: false, endOfListText: false };
     }
@@ -1296,7 +1451,7 @@ export class GoogleMapsScraper {
           }
           if (!name || name.length < 2) {
             const allText = card.textContent || '';
-            const textMatch = allText.match(/^([A-Z][A-Za-z0-9\s\-'&.,]+)/);
+            const textMatch = allText.match(/^([\p{L}\p{N}][\p{L}\p{N}\s\-'&.,]+)/u);
             if (textMatch) { const t = textMatch[1].trim(); if (t.length > 2 && t.length < 100) name = t; }
           }
           if (!name || name.length < 2) continue;
@@ -1344,8 +1499,17 @@ export class GoogleMapsScraper {
     }
 
     const parts = fullAddress.split(',').map(p => p.trim()).filter(Boolean);
-    const pincodeMatch = fullAddress.match(/\b(\d{6})\b/);
-    const pincode = pincodeMatch ? pincodeMatch[0] : '';
+
+    const indiaPin = fullAddress.match(/\b(\d{6})\b/);
+    const usZip = fullAddress.match(/\b(\d{5})(?:-\d{4})?\b/);
+    const canadaPost = fullAddress.match(/\b([A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d)\b/);
+    const ukPost = fullAddress.match(/\b([A-Za-z]{1,2}\d{1,2}[A-Za-z]?\s?\d[A-Za-z]{2})\b/);
+
+    const pincode = indiaPin ? indiaPin[0]
+      : canadaPost ? canadaPost[1].replace(/\s/, ' ').toUpperCase()
+      : ukPost ? ukPost[1].toUpperCase()
+      : usZip ? usZip[0]
+      : '';
 
     if (parts.length >= 2) {
       const lastPart = parts[parts.length - 1];
@@ -1355,7 +1519,7 @@ export class GoogleMapsScraper {
     }
 
     if (pincode) {
-      const pincodePartIdx = parts.findIndex(p => p.includes(pincode));
+      const pincodePartIdx = parts.findIndex(p => p.includes(pincode.split(' ')[0]));
       if (pincodePartIdx >= 1) {
         result.state = parts[pincodePartIdx - 1];
         if (pincodePartIdx >= 2) {
@@ -1365,6 +1529,13 @@ export class GoogleMapsScraper {
           result.area = parts.slice(0, pincodePartIdx).join(', ');
         }
       }
+    } else if (parts.length >= 3) {
+      result.city = parts[parts.length - (result.country ? 3 : 2)];
+      result.state = parts[parts.length - (result.country ? 2 : 1)];
+      result.area = parts.slice(0, parts.length - (result.country ? 3 : 2)).join(', ');
+    } else if (parts.length === 2) {
+      result.city = parts[0];
+      result.state = parts[1];
     }
 
     if (!result.city && contextCity) result.city = contextCity;
@@ -1596,7 +1767,15 @@ export class GoogleMapsScraper {
   }
 
   private extractPincode(text: string): string | undefined {
-    const m = text.match(/\b(\d{6})\b/); return m ? m[1] : undefined;
+    const india = text.match(/\b(\d{6})\b/);
+    if (india) return india[1];
+    const canada = text.match(/\b([A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d)\b/);
+    if (canada) return canada[1].replace(/\s/, ' ').toUpperCase();
+    const uk = text.match(/\b([A-Za-z]{1,2}\d{1,2}[A-Za-z]?\s?\d[A-Za-z]{2})\b/);
+    if (uk) return uk[1].toUpperCase();
+    const us = text.match(/\b(\d{5})(?:-\d{4})?\b/);
+    if (us) return us[1];
+    return undefined;
   }
 
   private async extractBusinessStatus(page: Page): Promise<string | undefined> {
@@ -1830,12 +2009,12 @@ export class GoogleMapsScraper {
     try {
       const addr = await this.extractAddress(page);
       if (addr) {
-        const pincode = this.extractPincode(addr);
+        const postalCode = this.extractPincode(addr);
         const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
         const result: Record<string, string> = {};
-        if (pincode) {
-          result.postalCode = pincode;
-          const pIdx = parts.findIndex(p => p.includes(pincode));
+        if (postalCode) {
+          result.postalCode = postalCode;
+          const pIdx = parts.findIndex(p => p.includes(postalCode.split(' ')[0]));
           if (pIdx > 0) result.state = parts[pIdx - 1];
           if (pIdx > 1) result.city = parts[pIdx - 2];
           if (pIdx > 0) result.streetAddress = parts.slice(0, pIdx - (pIdx > 1 ? 2 : 1)).join(', ');
@@ -1843,7 +2022,6 @@ export class GoogleMapsScraper {
         } else if (parts.length >= 3) {
           result.city = parts[parts.length - 3];
           result.state = parts[parts.length - 2];
-          result.postalCode = parts[parts.length - 1];
           result.streetAddress = parts.slice(0, parts.length - 3).join(', ');
         } else if (parts.length === 2) {
           result.streetAddress = parts[0];
@@ -1888,19 +2066,34 @@ export class GoogleMapsScraper {
   }
 
   private async extractEmailsFromWebsite(website: string): Promise<string[]> {
+    const allEmails = new Set<string>();
     try {
-      const url = website.startsWith('http') ? website : `https://${website}`;
-      const resp = await axios.get(url, {
-        timeout: 5000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        validateStatus: (s) => s < 400,
-      });
-      const html = typeof resp.data === 'string' ? resp.data : String(resp.data);
-      const extracted = extractEmailsFromHtml(html, 'website');
-      return [...new Set(extracted.map(e => e.email))];
-    } catch {
-      return [];
-    }
+      const base = website.startsWith('http') ? website : `https://${website}`;
+      const origin = new URL(base).origin;
+      const pagesToTry = [
+        base,
+        `${origin}/contact`,
+        `${origin}/contact-us`,
+        `${origin}/about`,
+        `${origin}/about-us`,
+        `${origin}/team`,
+        `${origin}/services`,
+      ];
+      for (const url of pagesToTry) {
+        try {
+          const resp = await axios.get(url, {
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            validateStatus: (s) => s < 400,
+          });
+          const html = typeof resp.data === 'string' ? resp.data : String(resp.data);
+          const extracted = extractEmailsFromHtml(html, 'website');
+          for (const e of extracted) allEmails.add(e.email);
+          if (allEmails.size > 0) break;
+        } catch { }
+      }
+    } catch { }
+    return [...allEmails];
   }
 
   private normalizeWebsite(url: string): string | undefined {
@@ -1917,11 +2110,15 @@ export class GoogleMapsScraper {
   private normalizePhone(phone: string): string | undefined {
     if (!phone) return undefined;
     const cleaned = phone.replace(/[\s\-\(\)\.]/g, '');
-    if (cleaned.match(/^\+/)) return cleaned;
-    if (cleaned.match(/^\d{10,15}$/)) return `+${cleaned}`;
+    if (cleaned.match(/^\+\d{7,15}$/)) return cleaned;
     if (cleaned.match(/^00\d{9,14}$/)) return `+${cleaned.substring(2)}`;
-    if (cleaned.match(/^\d{10}$/)) return `+${cleaned}`;
-    if (cleaned.match(/^0\d{10,14}$/)) return `+${cleaned.substring(1)}`;
+    if (cleaned.match(/^\d{11,15}$/)) return `+${cleaned}`;
+    if (cleaned.match(/^0\d{9,14}$/)) return `+${cleaned.substring(1)}`;
+    if (cleaned.match(/^\d{10}$/) && this.lastActiveOptions?.country) {
+      const c = (this.lastActiveOptions.country || '').toLowerCase().trim();
+      if (c === 'india' || c === '') return `+91${cleaned}`;
+    }
+    if (cleaned.match(/^\d{7,9}$/)) return undefined;
     return undefined;
   }
 

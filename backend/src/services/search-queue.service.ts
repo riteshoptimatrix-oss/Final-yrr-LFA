@@ -9,6 +9,7 @@ import { Lead } from '../models/Lead';
 import { logger } from '../utils/logger';
 import { SearchState } from '../automation/search-state-machine';
 import { FilterQuery } from 'mongoose';
+import { buildLocationString } from '../utils/location-query-builder';
 
 const TABLE_FLIP = '(╯°□°)╯︵ ┻━┻';
 
@@ -92,11 +93,12 @@ class SearchQueueService {
       { $set: { status: 'running', isRunning: true, stoppedAt: null, searchState: SearchState.QUEUED } }
     );
 
-    const locationString = record.area
-      ? `${record.area}, ${record.city}, ${record.state}`
-      : record.city
-        ? `${record.city}, ${record.state}`
-        : '';
+    const locationString = buildLocationString({
+      area: record.area,
+      city: record.city,
+      state: record.state,
+      country: record.country,
+    });
 
     const resumeSources = Array.isArray(record.sources) && record.sources.length > 0
       ? record.sources
@@ -110,7 +112,7 @@ class SearchQueueService {
       keyword: record.keyword,
       location: locationString,
       sources: resumeSources,
-      limit: 50,
+      limit: 0,
       state: record.state,
       city: record.city,
       area: record.area,
@@ -317,11 +319,12 @@ class SearchQueueService {
         searchStatus.setState(sessionId, SearchState.QUEUED);
         searchStatus.addLog(sessionId, 'Session recovered after server restart', 'info');
 
-        const locationString = record.area
-          ? `${record.area}, ${record.city}, ${record.state}`
-          : record.city
-            ? `${record.city}, ${record.state}`
-            : '';
+        const locationString = buildLocationString({
+          area: record.area,
+          city: record.city,
+          state: record.state,
+          country: record.country,
+        });
 
         await this.enqueue(sessionId, {
           keyword: record.keyword,
@@ -329,7 +332,7 @@ class SearchQueueService {
           sources: Array.isArray(record.sources) && record.sources.length > 0
             ? record.sources
             : [...DEFAULT_SEARCH_SOURCES],
-          limit: 50,
+          limit: 0,
           state: record.state,
           city: record.city,
           area: record.area,

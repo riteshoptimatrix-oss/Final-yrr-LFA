@@ -62,6 +62,7 @@ export interface ILead extends Document {
   serviceOptions?: string[];
   ownerClaimed?: boolean;
   plusCode?: string;
+  placeId?: string;
   leadScore: number;
 
   // AI Pipeline status fields
@@ -646,6 +647,11 @@ const leadSchema = new Schema<ILead>(
     sourceUrl: {
       type: String,
       trim: true,
+    },
+    placeId: {
+      type: String,
+      trim: true,
+      index: true,
     },
     extractionSource: {
       type: String,

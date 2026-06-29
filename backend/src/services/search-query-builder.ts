@@ -27,38 +27,24 @@ export interface MultiQueryInput {
   sources: string[];
 }
 
+import { buildMapsSearchQuery } from '../utils/location-query-builder';
+
 export class SearchQueryBuilder {
   build(input: SearchInput): SourceQuery[] {
     const { businessType, state, city, area, country, sources } = input;
     const queries: SourceQuery[] = [];
+    const locationParts = { area, city, state, country };
 
     for (const source of sources) {
       switch (source) {
         case 'google-maps': {
-          const query = area
-            ? `${businessType} in ${area} ${city} ${state || ''} ${country || ''}`
-            : city
-              ? `${businessType} in ${city} ${state || ''} ${country || ''}`
-              : businessType;
-
-          const locationParts: string[] = [];
-          if (area) locationParts.push(area);
-          if (city) locationParts.push(city);
-          if (state) locationParts.push(state);
-          if (country) locationParts.push(country);
-          const locationStr = locationParts.length > 0 ? locationParts.join(', ') : '';
-
-          const fullSearchQuery = area
-            ? `${businessType} in ${locationStr}`
-            : city
-              ? `${businessType} in ${locationStr}`
-              : businessType;
+          const { searchQuery } = buildMapsSearchQuery(businessType, locationParts);
 
           queries.push({
             source: 'google-maps',
-            query,
-            url: `https://www.google.com/maps/search/${encodeURIComponent(query)}`,
-            fullSearchQuery,
+            query: searchQuery,
+            url: `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`,
+            fullSearchQuery: searchQuery,
           });
           break;
         }

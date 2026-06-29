@@ -1,8 +1,6 @@
-// Google Maps scraper unlimited scroll configuration and initialization
+// Google Maps scraper unlimited scroll configuration
 
-const ENABLE_UNLIMITED_SCROLL = true;
-const MAX_SCROLL_ATTEMPTS = 50;
-const SCROLL_PAUSE_MS = 2000;
-const SCROLL_INCREMENT_PX = 600;
-const MIN_SCROLL_STEP = 200;
-const MAX_SCROLL_STEP = 1200;
+export const ENABLE_UNLIMITED_SCROLL = true;
+export const SCROLL_PAUSE_MS = 2000;
+export const SCROLL_SAFETY_CAP = 10000;
+export const IDLE_SCROLL_END_THRESHOLD = 15;

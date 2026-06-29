@@ -7,6 +7,7 @@ import {
   getAllCountries,
   getStatesOfCountry,
   getCitiesOfState,
+  getCitiesOfCountry,
   searchAreas,
   cancelAreaSearch,
 } from "@/services/geography.service";
@@ -344,6 +345,9 @@ export function LocationSelector({
   const prevStateRef = useRef(value.state);
   const prevCityRef = useRef(value.city);
 
+  const countryHasStates = internalStates.length > 0;
+  const canSelectCity = !!value.country && (!countryHasStates || !!value.state);
+
   const onCountryChange = useCallback((country: GeographyCountry | null) => {
     console.log(`[LocationSelector] Country changed:`, country?.name || 'null', `ISO: ${country?.iso2 || 'N/A'}`);
 
@@ -354,7 +358,10 @@ export function LocationSelector({
     }
 
     setInternalStates(states);
-    setInternalCities([]);
+    const cities = country && states.length === 0
+      ? getCitiesOfCountry(country.iso2)
+      : [];
+    setInternalCities(cities);
     setInternalAreas([]);
 
     onChange({
@@ -408,7 +415,7 @@ export function LocationSelector({
       clearTimeout(debounceRef.current);
     }
 
-    if (!query || query.trim().length < 3 || !value.country || !value.state || !value.city) {
+    if (!query || query.trim().length < 3 || !value.country || !value.city) {
       if (!query) {
         setInternalAreas([]);
         setAreasLoading(false);
@@ -423,8 +430,14 @@ export function LocationSelector({
     debounceRef.current = setTimeout(async () => {
       try {
         const countryIso2 = value.country!.iso2;
-        console.log(`[LocationSelector] Searching areas: "${query}" in ${value.city!.name}, ${value.state!.name}, ${value.country!.name} (ISO: ${countryIso2})`);
-        const results = await searchAreas(query, value.country!.name, value.state!.name, value.city!.name, countryIso2);
+        console.log(`[LocationSelector] Searching areas: "${query}" in ${value.city!.name}, ${value.state?.name || value.country!.name}, ${value.country!.name} (ISO: ${countryIso2})`);
+        const results = await searchAreas(
+          query,
+          value.country!.name,
+          value.state?.name || '',
+          value.city!.name,
+          countryIso2
+        );
         console.log(`[LocationSelector] Areas found: ${results.length}`);
         setInternalAreas(results);
         setAreasError(results.length === 0);
@@ -466,14 +479,23 @@ export function LocationSelector({
   }, [value.city]);
 
   useEffect(() => {
-    if (!value.country || !value.state) {
+    if (!value.country) {
+      setInternalCities([]);
+      return;
+    }
+    if (internalStates.length === 0) {
+      const cities = getCitiesOfCountry(value.country.iso2);
+      setInternalCities(cities);
+      return;
+    }
+    if (!value.state) {
       setInternalCities([]);
       return;
     }
     const cities = getCitiesOfState(value.country.iso2, value.state.isoCode);
     console.log(`[LocationSelector][Effect] Cities synced: ${cities.length} for ${value.state.name} (countryISO: ${value.country.iso2}, stateISO: ${value.state.isoCode})`);
     setInternalCities(cities);
-  }, [value.country, value.state]);
+  }, [value.country, value.state, internalStates.length]);
 
   useEffect(() => {
     return () => {
@@ -484,8 +506,10 @@ export function LocationSelector({
     };
   }, []);
 
-  const areaSearchPlaceholder = !value.country || !value.state || !value.city
-    ? "Select country, state, and city first"
+  const areaSearchPlaceholder = !value.country || !value.city
+    ? countryHasStates && !value.state
+      ? "Select country, state, and city first"
+      : "Select country and city first"
     : "Search specific area (Optional)";
 
   console.log(`[LocationSelector] Render: country=${value.country?.name || 'none'}, states=${internalStates.length}, cities=${internalCities.length}, areas=${internalAreas.length}`);
@@ -510,13 +534,13 @@ export function LocationSelector({
         />
       )}
 
-      {showState && (
+      {showState && countryHasStates && (
         <Dropdown<GeographyState>
           selectId="state"
           items={internalStates}
           value={value.state}
           onChange={onStateChange}
-          placeholder="Select State"
+          placeholder="Select State / Province"
           searchPlaceholder="Search states..."
           disabled={disabled || !value.country}
           loading={false}
@@ -533,7 +557,7 @@ export function LocationSelector({
           onChange={onCityChange}
           placeholder="Select City"
           searchPlaceholder="Search cities..."
-          disabled={disabled || !value.state}
+          disabled={disabled || !canSelectCity}
           loading={false}
           getKey={item => item._id}
           renderLabel={item => item.name}

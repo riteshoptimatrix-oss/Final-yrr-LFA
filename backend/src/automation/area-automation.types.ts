@@ -13,8 +13,8 @@ export interface IAreaAutomationJob {
   id: string;
   sessionId: string;
   businessType: string;
-  state: string;
   city: string;
+  state?: string;
   area?: string;
   country?: string;
   sources: string[];
@@ -40,8 +40,8 @@ export interface IAreaAutomationSession {
   id: string;
   name: string;
   businessTypes: string[];
-  state: string;
   cities: string[];
+  state?: string;
   country?: string;
   sources: string[];
   status: AreaSessionStatus;
@@ -79,8 +79,8 @@ export interface IAreaAutomationSession {
 
 export interface StartAutomationRequest {
   businessTypes: string[];
-  state: string;
   cities: string[];
+  state?: string;
   country?: string;
   sources: string[];
   name?: string;

@@ -1,0 +1,25 @@
+{
+  "name": "lead-finder-agent",
+  "version": "1.0.0",
+  "description": "Lead Finder Agent - AI-Powered Lead Discovery Platform",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "ai-service"
+  ],
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:ai\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:ai": "cd ai-service && python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    "build": "cd backend && npm run build && cd ../frontend && npm run build",
+    "start:production": "bash scripts/start-production.sh",
+    "typecheck": "cd backend && npm run typecheck && cd ../frontend && npm run typecheck",
+    "test": "cd backend && npm test",
+    "lint": "cd backend && npm run lint && cd ../frontend && npm run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

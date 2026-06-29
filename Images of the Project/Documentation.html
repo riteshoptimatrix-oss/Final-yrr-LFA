@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lead Finder AI Automation — Project Documentation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+
+    /* ═══════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════ */
+    :root {
+      --ink:        #FAFAF8;
+      --ink-2:      #FFFFFF;
+      --ink-3:      #F5F5F2;
+      --line:       #E5E7EB;
+      --text-muted: #6B7280;
+      --text-body:  #4B5563;
+      --text-head:  #111827;
+      --accent:     #059669;
+      --accent-2:   #2563EB;
+      --accent-3:   #7C3AED;
+      --accent-glow: rgba(5,150,99,0.12);
+      --warn:       #D97706;
+      --danger:     #DC2626;
+      --mono:       'JetBrains Mono', monospace;
+      --sans:       'Inter', sans-serif;
+      --display:    'Sora', sans-serif;
+      --radius:     8px;
+      --radius-lg:  14px;
+      --shadow:     0 1px 3px rgba(0,0,0,0.05), 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    /* ═══════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 10pt; }
+
+    body {
+      background: var(--ink);
+      color: var(--text-body);
+      font-family: var(--sans);
+      line-height: 1.7;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ═══════════════════════════════════════════
+       A4 PAGE WRAPPER
+    ═══════════════════════════════════════════ */
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      background: var(--ink);
+    }
+
+    /* ═══════════════════════════════════════════
+       PRINT OVERRIDES
+    ═══════════════════════════════════════════ */
+    @media print {
+      @page {
+        size: A4;
+        margin: 16mm 14mm;
+      }
+
+      html, body { background: var(--ink) !important; }
+
+      .page { width: 100%; margin: 0; padding: 0; }
+
+      .no-print { display: none !important; }
+    }
+
+    /* ═══════════════════════════════════════════
+       COVER PAGE
+    ═══════════════════════════════════════════ */
+    .cover {
+      width: 100%;
+      min-height: 297mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20mm 18mm 16mm;
+      position: relative;
+      background: var(--ink);
+      overflow: hidden;
+    }
+
+    .cover::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -80px;
+      width: 420px; height: 420px;
+      background: radial-gradient(circle, rgba(37,99,235,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .cover::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%; height: 3px;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent), var(--accent-3));
+    }
+
+    .cover-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--ink-3);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 8pt;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      letter-spacing: 0.04em;
+      width: fit-content;
+    }
+
+    .cover-badge .dot {
+      width: 7px; height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    .cover-headline {
+      margin-top: 60px;
+    }
+
+    .cover-headline .eyebrow {
+      font-family: var(--mono);
+      font-size: 8pt;
+      color: var(--accent-2);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .cover-headline h1 {
+      font-family: var(--display);
+      font-size: 36pt;
+      font-weight: 800;
+      color: var(--text-head);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .cover-headline h1 span {
+      background: linear-gradient(90deg, var(--accent-2), var(--accent-3));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .cover-headline .subtitle {
+      margin-top: 18px;
+      font-size: 12pt;
+      color: var(--text-muted);
+      max-width: 420px;
+      line-height: 1.6;
+    }
+
+    .cover-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 32px;
+    }
+
+    .cover-tag {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 8pt;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    .cover-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 50px;
+    }
+
+    .stat-card {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 18px 16px;
+    }
+
+    .stat-card .num {
+      font-family: var(--display);
+      font-size: 22pt;
+      font-weight: 800;
+      color: var(--text-head);
+    }
+
+    .stat-card .label {
+      font-size: 8pt;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .cover-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    .cover-footer .meta p {
+      font-size: 8pt;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    .cover-footer .version {
+      font-family: var(--mono);
+      font-size: 8pt;
+      color: var(--accent);
+      background: var(--accent-glow);
+      border: 1px solid rgba(5,150,99,0.25);
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+
+    /* ═══════════════════════════════════════════
+       TABLE OF CONTENTS
+    ═══════════════════════════════════════════ */
+    .toc-page {
+      padding: 16mm 18mm;
+      min-height: 297mm;
+    }
+
+    .toc-page .section-title {
+      margin-bottom: 28px;
+    }
+
+    .toc-list {
+      list-style: none;
+      counter-reset: toc;
+    }
+
+    .toc-list li {
+      counter-increment: toc;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 10pt;
+    }
+
+    .toc-list li:last-child { border-bottom: none; }
+
+    .toc-list li::before {
+      content: counter(toc, decimal-leading-zero);
+      font-family: var(--mono);
+      font-size: 8pt;
+      color: var(--accent-2);
+      min-width: 28px;
+    }
+
+    .toc-list .toc-name { flex: 1; color: var(--text-body); }
+
+    .toc-list .toc-dots {
+      flex: 1;
+      border-bottom: 1px dashed var(--line);
+      height: 1px;
+      margin: 0 8px;
+      align-self: center;
+    }
+
+    .toc-list .toc-pg {
+      font-family: var(--mono);
+      font-size: 8pt;
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════
+       CONTENT SECTIONS
+    ═══════════════════════════════════════════ */
+    .content-section {
+      padding: 10mm 18mm;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .section-title .num {
+      font-family: var(--mono);
+      font-size: 8pt;
+      color: var(--accent-2);
+      background: rgba(37,99,235,0.08);
+      border: 1px solid rgba(37,99,235,0.2);
+      padding: 3px 9px;
+      border-radius: 20px;
+    }
+
+    .section-title h2 {
+      font-family: var(--display);
+      font-size: 16pt;
+      font-weight: 700;
+      color: var(--text-head);
+      letter-spacing: -0.01em;
+    }
+
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: var(--line);
+      margin: 10px 0 20px;
+    }
+
+    /* body text */
+    .section-block p {
+      font-size: 9.5pt;
+      color: var(--text-body);
+      margin-bottom: 10px;
+      line-height: 1.75;
+    }
+
+    /* ═══════════════════════════════════════════
+       FEATURE CARDS
+    ═══════════════════════════════════════════ */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .card {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .card-icon {
+      width: 32px; height: 32px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .card-icon.green  { background: rgba(5,150,99,0.12);  }
+    .card-icon.blue   { background: rgba(37,99,235,0.12); }
+    .card-icon.purple { background: rgba(124,58,237,0.12); }
+    .card-icon.warn   { background: rgba(217,119,6,0.12); }
+    .card-icon.red    { background: rgba(220,38,38,0.12);  }
+    .card-icon.teal   { background: rgba(6,182,212,0.10); }
+
+    .card h3 {
+      font-family: var(--display);
+      font-size: 10pt;
+      font-weight: 600;
+      color: var(--text-head);
+    }
+
+    .card ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .card ul li {
+      font-size: 8.5pt;
+      color: var(--text-body);
+      padding: 3px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      line-height: 1.5;
+    }
+
+    .card ul li::before {
+      content: '▸';
+      color: var(--accent-2);
+      font-size: 8pt;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ═══════════════════════════════════════════
+       TECH TABLE
+    ═══════════════════════════════════════════ */
+    .table-wrap {
+      margin: 16px 0;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9pt;
+    }
+
+    thead tr {
+      background: var(--ink-3);
+    }
+
+    thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: var(--mono);
+    }
+
+    tbody tr {
+      border-top: 1px solid var(--line);
+    }
+
+    tbody tr:nth-child(even) { background: rgba(0,0,0,0.02); }
+
+    tbody td {
+      padding: 10px 16px;
+      color: var(--text-body);
+      font-size: 9pt;
+      vertical-align: middle;
+    }
+
+    tbody td:first-child {
+      font-family: var(--mono);
+      color: var(--accent-2);
+      font-size: 8.5pt;
+      font-weight: 600;
+    }
+
+    /* ═══════════════════════════════════════════
+       PIPELINE STAGES
+    ═══════════════════════════════════════════ */
+    .pipeline-stages {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+
+    .stage {
+      flex: 1;
+      min-width: 90px;
+      border-radius: var(--radius);
+      padding: 12px 10px;
+      text-align: center;
+      border: 1px solid var(--line);
+      background: var(--ink-2);
+    }
+
+    .stage .stage-icon { font-size: 16px; }
+
+    .stage .stage-name {
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--text-head);
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+
+    .stage.s1 { border-color: rgba(37,99,235,0.3);   background: rgba(37,99,235,0.06); }
+    .stage.s2 { border-color: rgba(217,119,6,0.3);   background: rgba(217,119,6,0.06); }
+    .stage.s3 { border-color: rgba(5,150,99,0.3);    background: rgba(5,150,99,0.06); }
+    .stage.s4 { border-color: rgba(124,58,237,0.3);  background: rgba(124,58,237,0.06); }
+    .stage.s5 { border-color: rgba(220,38,38,0.3);   background: rgba(220,38,38,0.06); }
+
+    /* ═══════════════════════════════════════════
+       WORKFLOW ARROW LIST
+    ═══════════════════════════════════════════ */
+    .workflow {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 16px 0;
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+    }
+
+    .wf-step {
+      background: var(--ink-3);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 8pt;
+      font-family: var(--mono);
+      color: var(--text-body);
+    }
+
+    .wf-arrow {
+      color: var(--accent-2);
+      font-size: 12pt;
+      font-weight: 700;
+    }
+
+    /* ═══════════════════════════════════════════
+       BADGE ROW
+    ═══════════════════════════════════════════ */
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 8pt;
+      font-weight: 500;
+      border: 1px solid;
+    }
+
+    .badge.green  { color: var(--accent);  background: rgba(5,150,99,0.1);   border-color: rgba(5,150,99,0.25); }
+    .badge.blue   { color: var(--accent-2); background: rgba(37,99,235,0.1);  border-color: rgba(37,99,235,0.25); }
+    .badge.purple { color: var(--accent-3); background: rgba(124,58,237,0.1); border-color: rgba(124,58,237,0.25); }
+    .badge.warn   { color: var(--warn);  background: rgba(217,119,6,0.1);  border-color: rgba(217,119,6,0.25); }
+    .badge.red    { color: var(--danger);  background: rgba(220,38,38,0.1);   border-color: rgba(220,38,38,0.25); }
+
+    /* ═══════════════════════════════════════════
+       ARCHITECTURE GRID
+    ═══════════════════════════════════════════ */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .arch-card {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+
+    .arch-card .arch-label {
+      font-family: var(--mono);
+      font-size: 7pt;
+      color: var(--accent-2);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .arch-card ul {
+      list-style: none;
+    }
+
+    .arch-card ul li {
+      font-size: 8.5pt;
+      color: var(--text-body);
+      padding: 2px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .arch-card ul li::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    /* ═══════════════════════════════════════════
+       HEATMAP TABLE
+    ═══════════════════════════════════════════ */
+    .heat-row {
+      display: flex;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .heat-item {
+      flex: 1;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      border: 1px solid;
+    }
+
+    .heat-item.low    { background: rgba(5,150,99,0.08);   border-color: rgba(5,150,99,0.25); }
+    .heat-item.medium { background: rgba(217,119,6,0.08);  border-color: rgba(217,119,6,0.25); }
+    .heat-item.high   { background: rgba(220,38,38,0.08);  border-color: rgba(220,38,38,0.25); }
+
+    .heat-item .heat-color {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 3px;
+    }
+
+    .heat-item.low    .heat-color { color: var(--accent); }
+    .heat-item.medium .heat-color { color: var(--warn); }
+    .heat-item.high   .heat-color { color: var(--danger); }
+
+    .heat-item .heat-meaning {
+      font-size: 8.5pt;
+      color: var(--text-body);
+    }
+
+    /* ═══════════════════════════════════════════
+       SECURITY CHIPS
+    ═══════════════════════════════════════════ */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .security-chip {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .security-chip .sc-icon { font-size: 18px; }
+
+    .security-chip .sc-text {
+      font-size: 8.5pt;
+      color: var(--text-body);
+      line-height: 1.4;
+    }
+
+    /* ═══════════════════════════════════════════
+       SUMMARY BLOCK
+    ═══════════════════════════════════════════ */
+    .summary-block {
+      background: linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(124,58,237,0.08) 100%);
+      border: 1px solid rgba(37,99,235,0.18);
+      border-radius: var(--radius-lg);
+      padding: 24px 28px;
+      margin: 20px 0;
+    }
+
+    .summary-block h3 {
+      font-family: var(--display);
+      font-size: 13pt;
+      font-weight: 700;
+      color: var(--text-head);
+      margin-bottom: 12px;
+    }
+
+    .summary-block p {
+      font-size: 9.5pt;
+      color: var(--text-body);
+      line-height: 1.75;
+      margin-bottom: 8px;
+    }
+
+    .summary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .summary-tag {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 8pt;
+      font-family: var(--mono);
+      background: var(--ink-3);
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════
+       PERFORMANCE PANEL
+    ═══════════════════════════════════════════ */
+    .perf-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 16px 0;
+    }
+
+    .perf-col {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+    }
+
+    .perf-col h4 {
+      font-size: 9pt;
+      font-weight: 600;
+      color: var(--text-head);
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .perf-col ul {
+      list-style: none;
+    }
+
+    .perf-col ul li {
+      font-size: 8.5pt;
+      color: var(--text-body);
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .perf-col ul li::before {
+      content: '⚡';
+      font-size: 9pt;
+    }
+
+    /* ═══════════════════════════════════════════
+       IMAGE SECTIONS
+    ═══════════════════════════════════════════ */
+    .img-section-header {
+      padding: 10mm 18mm 4mm;
+    }
+
+    .img-section-header h2 {
+      font-family: var(--display);
+      font-size: 18pt;
+      font-weight: 800;
+      color: var(--text-head);
+      margin-bottom: 6px;
+    }
+
+    .img-section-header p {
+      font-size: 9pt;
+      color: var(--text-muted);
+    }
+
+    .img-page {
+      padding: 6mm 18mm 10mm;
+    }
+
+    .img-folder-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .img-folder-title .folder-icon {
+      font-size: 18px;
+    }
+
+    .img-folder-title h3 {
+      font-family: var(--display);
+      font-size: 12pt;
+      font-weight: 700;
+      color: var(--text-head);
+    }
+
+    .img-folder-title .folder-badge {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 7.5pt;
+      color: var(--accent);
+      background: rgba(5,150,99,0.08);
+      border: 1px solid rgba(5,150,99,0.2);
+      padding: 2px 10px;
+      border-radius: 20px;
+    }
+
+    .img-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .img-grid.single {
+      grid-template-columns: 1fr;
+    }
+
+    .img-card {
+      background: var(--ink-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .img-card img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      max-height: 220px;
+    }
+
+    /* placeholder when image not loaded */
+    .img-card img::after {
+      content: attr(alt);
+    }
+
+    .img-placeholder {
+      width: 100%;
+      height: 180px;
+      background: var(--ink-3);
+      border: 2px dashed var(--line);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 8.5pt;
+      font-family: var(--mono);
+      gap: 6px;
+    }
+
+    .img-placeholder .ph-icon { font-size: 22px; opacity: 0.5; }
+
+    .img-caption {
+      padding: 9px 12px;
+      font-size: 8pt;
+      color: var(--text-muted);
+      border-top: 1px solid var(--line);
+      font-family: var(--mono);
+    }
+
+    /* ═══════════════════════════════════════════
+       PAGE FOOTER
+    ═══════════════════════════════════════════ */
+    .page-footer {
+      padding: 6mm 18mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--line);
+      margin-top: 4mm;
+    }
+
+    .page-footer span {
+      font-size: 7.5pt;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    /* ═══════════════════════════════════════════
+       SECTION SEPARATOR
+    ═══════════════════════════════════════════ */
+    .sec-sep {
+      height: 6mm;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--line) 0px,
+        var(--line) 1px,
+        transparent 1px,
+        transparent 18px
+      );
+      opacity: 0.3;
+      margin: 0 18mm;
+    }
+
+    /* ═══════════════════════════════════════════
+       INLINE CODE
+    ═══════════════════════════════════════════ */
+    code {
+      font-family: var(--mono);
+      font-size: 8pt;
+      background: var(--ink-3);
+      border: 1px solid var(--line);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent-2);
+    }
+
+    /* ═══════════════════════════════════════════
+       PRINT BUTTON (screen only)
+    ═══════════════════════════════════════════ */
+    .print-btn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: var(--accent-2);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 22px;
+      font-size: 10pt;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--sans);
+      box-shadow: 0 4px 20px rgba(37,99,235,0.35);
+      z-index: 999;
+    }
+
+    .print-btn:hover { background: #3B82F6; }
+
+  </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+
+<div class="page">
+
+  <!-- ═══════════════════════════════════════════
+       COVER PAGE
+  ═══════════════════════════════════════════ -->
+  <div class="cover">
+    <div>
+      <div class="cover-headline">
+        <div class="eyebrow">PROJECT DOCUMENTATION</div>
+        <h1>Lead Finder<br /><span>AI Automation</span></h1>
+        <p class="subtitle">
+          A hyperlocal lead generation and CRM automation platform — scraping, managing,
+          and visualizing business intelligence from Google Maps, JustDial & IndiaMart.
+        </p>
+      </div>
+
+      <div class="cover-tags">
+        <span class="cover-tag">Next.js 15</span>
+        <span class="cover-tag">Node.js + Express</span>
+        <span class="cover-tag">MongoDB</span>
+        <span class="cover-tag">Playwright</span>
+        <span class="cover-tag">TypeScript</span>
+        <span class="cover-tag">Recharts</span>
+        <span class="cover-tag">React Leaflet</span>
+        <span class="cover-tag">Zustand</span>
+      </div>
+
+      <div class="cover-stats">
+        <div class="stat-card">
+          <div class="num">3</div>
+          <div class="label">Scraping Sources</div>
+        </div>
+        <div class="stat-card">
+          <div class="num">5</div>
+          <div class="label">CRM Pipeline Stages</div>
+        </div>
+        <div class="stat-card">
+          <div class="num">8</div>
+          <div class="label">App Modules</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <div class="meta">
+        <p><strong style="color:var(--text-body)">Platform</strong> — Lead Finder AI Automation</p>
+        <p><strong style="color:var(--text-body)">Type</strong> — Full-Stack SaaS · Production Grade</p>
+        <p><strong style="color:var(--text-body)">Stack</strong> — Next.js · Node.js · MongoDB · Playwright</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TABLE OF CONTENTS
+  ═══════════════════════════════════════════ -->
+  <div class="toc-page">
+    <div class="section-title">
+      <h2>Table of Contents</h2>
+    </div>
+    <div class="divider"></div>
+    <ul class="toc-list">
+      <li><span class="toc-name">Project Overview</span>
+      <li><span class="toc-name">Project Objectives</span>
+      <li><span class="toc-name">Key Features</span>
+      <li><span class="toc-name">Technology Stack</span>
+      <li><span class="toc-name">Project Architecture</span>
+      <li><span class="toc-name">Search &amp; Scraping System</span>
+      <li><span class="toc-name">Lead Management System</span>
+      <li><span class="toc-name">CRM Pipeline System</span>
+      <li><span class="toc-name">Automation System</span>
+      <li><span class="toc-name">Analytics Dashboard</span>
+      <li><span class="toc-name">Area Heatmap</span>
+      <li><span class="toc-name">Database Design</span>
+      <li><span class="toc-name">Security Features</span>
+      <li><span class="toc-name">Performance Optimizations</span>
+      <li><span class="toc-name">Final Summary</span>
+      <li><span class="toc-name">Project Screenshots</span>
+    </ul>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 1 — PROJECT OVERVIEW
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">01</span>
+      <h2>Project Overview</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        Lead Finder AI Automation is a <strong style="color:var(--text-head)">production-grade, AI-powered lead generation and CRM automation platform</strong>
+        designed for modern business intelligence and sales workflows. The platform automatically discovers, scrapes, organizes,
+        analyzes, and manages business leads from multiple online sources.
+      </p>
+      <p>
+        The system uses a geographic hierarchy — <strong style="color:var(--text-head)">State → City → Area</strong> — to enable
+        hyperlocal lead discovery, making it the ideal tool for sales teams operating in specific regions or localities.
+      </p>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">🌐</div>
+          <h3>Data Sources</h3>
+        </div>
+        <ul>
+          <li>Google Maps</li>
+          <li>JustDial</li>
+          <li>IndiaMart</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon blue">🎯</div>
+          <h3>Target Audience</h3>
+        </div>
+        <ul>
+          <li>Lead generation agencies</li>
+          <li>Sales teams</li>
+          <li>Marketing companies</li>
+          <li>CRM operations</li>
+          <li>Business intelligence workflows</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 2 — OBJECTIVES
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">02</span>
+      <h2>Project Objectives</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The main objective is to <strong style="color:var(--text-head)">automate hyperlocal business lead generation</strong> with
+        real-time CRM management and analytics. The platform provides a unified ecosystem that bridges the gap between
+        raw data discovery and actionable sales intelligence.
+      </p>
+    </div>
+
+    <div class="badge-row">
+      <span class="badge blue">📊 Multi-Source Business Scraping</span>
+      <span class="badge green">⚡ Real-time Lead Storage</span>
+      <span class="badge purple">🔄 CRM Pipeline Workflows</span>
+      <span class="badge warn">🤖 Automation Systems</span>
+      <span class="badge blue">📍 Area-wise Analytics</span>
+      <span class="badge green">📤 Export Systems</span>
+      <span class="badge purple">📈 Business Intelligence Dashboards</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 3 — KEY FEATURES
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">03</span>
+      <h2>Key Features</h2>
+    </div>
+    <div class="divider"></div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon blue">🔍</div>
+          <h3>Multi-Source Scraping</h3>
+        </div>
+        <ul>
+          <li>Google Maps integration</li>
+          <li>JustDial data extraction</li>
+          <li>IndiaMart business discovery</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">⚡</div>
+          <h3>Real-time Lead Management</h3>
+        </div>
+        <ul>
+          <li>Instant MongoDB storage</li>
+          <li>Dynamic frontend updates</li>
+          <li>Real-time synchronization</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon purple">🔄</div>
+          <h3>CRM Pipeline</h3>
+        </div>
+        <ul>
+          <li>New Lead → Contacted → Interested</li>
+          <li>Follow-Up tracking</li>
+          <li>Not Interested management</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon warn">🤖</div>
+          <h3>Automation Engine</h3>
+        </div>
+        <ul>
+          <li>State-wise auto scraping</li>
+          <li>City-wise scraping</li>
+          <li>Area-wise multi-business search</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon teal">📊</div>
+          <h3>Analytics Dashboard</h3>
+        </div>
+        <ul>
+          <li>Total leads &amp; searches</li>
+          <li>Area heatmaps</li>
+          <li>Business density reports</li>
+          <li>Automation progress</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon red">📤</div>
+          <h3>Export &amp; Filters</h3>
+        </div>
+        <ul>
+          <li>CSV &amp; Excel export</li>
+          <li>Category / Source filters</li>
+          <li>Website &amp; phone filters</li>
+          <li>Dynamic pagination</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 4 — TECHNOLOGY STACK
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">04</span>
+      <h2>Technology Stack</h2>
+    </div>
+    <div class="divider"></div>
+
+    <p style="font-size:9pt; color:var(--text-muted); margin-bottom:12px;">Frontend Technologies</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Technology</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Next.js 15</td><td>Frontend Framework</td></tr>
+          <tr><td>React 19</td><td>UI Library</td></tr>
+          <tr><td>TypeScript</td><td>Type Safety</td></tr>
+          <tr><td>Tailwind CSS, MUI.com</td><td>Styling</td></tr>
+          <tr><td>Zustand</td><td>State Management</td></tr>
+          <tr><td>React Query</td><td>API Caching</td></tr>
+          <tr><td>Axios</td><td>API Requests</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="font-size:9pt; color:var(--text-muted); margin:16px 0 12px;">Backend Technologies</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Technology</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Node.js</td><td>Runtime Environment</td></tr>
+          <tr><td>Express.js</td><td>Backend REST APIs</td></tr>
+          <tr><td>TypeScript</td><td>Backend Type Safety</td></tr>
+          <tr><td>MongoDB</td><td>Primary Database</td></tr>
+          <tr><td>Mongoose</td><td>ODM (Object Data Modelling)</td></tr>
+          <tr><td>Playwright</td><td>Browser Scraping Engine</td></tr>
+          <tr><td>Chromium</td><td>Headless Browser Automation</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 5 — ARCHITECTURE
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">05</span>
+      <h2>Project Architecture</h2>
+    </div>
+    <div class="divider"></div>
+
+    <p style="font-size:9pt; color:var(--text-muted); margin-bottom:12px;">Frontend — Modular Component-Based Architecture</p>
+    <div class="arch-grid">
+      <div class="arch-card">
+        <div class="arch-label">Main Pages</div>
+        <ul>
+          <li>Dashboard</li>
+          <li>Search</li>
+          <li>Leads</li>
+          <li>CRM Pipeline</li>
+          <li>Analytics</li>
+          <li>Automation</li>
+          <li>Settings</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-label">Backend Modules</div>
+        <ul>
+          <li>Authentication</li>
+          <li>Scraper Engine</li>
+          <li>Lead Management</li>
+          <li>CRM Services</li>
+          <li>Automation Engine</li>
+          <li>Analytics Engine</li>
+          <li>Export Manager</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-label">Database Collections</div>
+        <ul>
+          <li>users</li>
+          <li>leads</li>
+          <li>crmPipeline</li>
+          <li>automationJobs</li>
+          <li>analytics</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 6 — SEARCH & SCRAPING
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">06</span>
+      <h2>Search &amp; Scraping System</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The user inputs a <strong style="color:var(--text-head)">Business Type</strong>, <strong style="color:var(--text-head)">State</strong>,
+        <strong style="color:var(--text-head)">City</strong>, <strong style="color:var(--text-head)">Area</strong> and selects sources.
+        Example: <code>Salon · Gujarat · Ahmedabad · Naroda</code>. The Playwright scraping engine then processes this through a multi-step validation pipeline.
+      </p>
+    </div>
+
+    <div class="workflow">
+      <span class="wf-step">Search Request</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Scraper Engine</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Playwright Browser</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Source Extraction</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Data Validation</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Duplicate Removal</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">MongoDB Storage</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Frontend Update</span>
+    </div>
+
+    <p style="font-size:9pt; color:var(--text-muted); margin: 14px 0 10px;">Extracted Business Data Fields</p>
+    <div class="badge-row">
+      <span class="badge blue">🏢 Business Name</span>
+      <span class="badge blue">🌐 Website</span>
+      <span class="badge green">📞 Phone Number</span>
+      <span class="badge green">📍 Address</span>
+      <span class="badge warn">⭐ Rating</span>
+      <span class="badge warn">💬 Reviews</span>
+      <span class="badge purple">🏷️ Business Category</span>
+      <span class="badge purple">📡 Source Platform</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 7 — LEAD MANAGEMENT
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">07</span>
+      <h2>Lead Management System</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The Leads page is the central hub for viewing and managing all collected business leads with real-time updates,
+        intelligent filtering, and responsive card layouts. Latest leads always appear first.
+      </p>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon blue">🔍</div>
+          <h3>Available Filters</h3>
+        </div>
+        <ul>
+          <li>Category</li>
+          <li>Source Platform</li>
+          <li>Area</li>
+          <li>Website Available</li>
+          <li>Phone Number Available</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">📄</div>
+          <h3>Page Features</h3>
+        </div>
+        <ul>
+          <li>Real-time lead updates</li>
+          <li>Dynamic filtering</li>
+          <li>Pagination (Prev / Current / Next)</li>
+          <li>Responsive lead cards</li>
+          <li>CSV &amp; Excel export options</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 8 — CRM PIPELINE
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">08</span>
+      <h2>CRM Pipeline System</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The CRM system enables structured, stage-based lead management. Each lead flows through a visual pipeline
+        with dynamic status updates, follow-up tracking, notes management, and priority assignment — all synchronized in real-time.
+      </p>
+    </div>
+
+    <div class="pipeline-stages">
+      <div class="stage s1">
+        <div class="stage-icon">🆕</div>
+        <div class="stage-name">New Lead</div>
+      </div>
+      <div class="stage s2">
+        <div class="stage-icon">📞</div>
+        <div class="stage-name">Contacted</div>
+      </div>
+      <div class="stage s3">
+        <div class="stage-icon">✅</div>
+        <div class="stage-name">Interested</div>
+      </div>
+      <div class="stage s4">
+        <div class="stage-icon">🔔</div>
+        <div class="stage-name">Follow-Up</div>
+      </div>
+      <div class="stage s5">
+        <div class="stage-icon">❌</div>
+        <div class="stage-name">Not Interested</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 9 — AUTOMATION
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">09</span>
+      <h2>Automation System</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The Automation Engine automates area-wise business scraping across multiple categories simultaneously.
+        It supports resume capability — if automation stops mid-process, it resumes from the last completed position,
+        preserving all previously completed jobs.
+      </p>
+    </div>
+
+    <div class="workflow">
+      <span class="wf-step">State</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">City</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Area</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Business Type</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">Multi-Source Scraping</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">MongoDB Storage</span>
+      <span class="wf-arrow">→</span>
+      <span class="wf-step">CRM Sync</span>
+    </div>
+
+    <div class="card-grid" style="margin-top:14px;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon warn">🏷️</div>
+          <h3>Multi-Business Automation</h3>
+        </div>
+        <ul>
+          <li>Salon, Gym, Grocery Store</li>
+          <li>Auto-creates scraping jobs per category</li>
+          <li>Per area combination support</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon green">♻️</div>
+          <h3>Resume Automation</h3>
+        </div>
+        <ul>
+          <li>Resume from last position</li>
+          <li>Continue pending jobs</li>
+          <li>Preserve completed jobs</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 10 — ANALYTICS
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">10</span>
+      <h2>Analytics Dashboard</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The Analytics page provides real-time business intelligence insights with dynamic charts, distribution graphs,
+        and source-specific analytics — giving teams full visibility into lead quality and scraping performance.
+      </p>
+    </div>
+
+    <div class="badge-row">
+      <span class="badge blue">📊 Total Leads</span>
+      <span class="badge blue">🔎 Total Searches</span>
+      <span class="badge purple">🤖 Automation Metrics</span>
+      <span class="badge green">📡 Source Analytics</span>
+      <span class="badge warn">🏙️ Business Density</span>
+      <span class="badge green">📈 Lead Distribution Graphs</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 11 — AREA HEATMAP
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">11</span>
+      <h2>Area Heatmap</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="section-block">
+      <p>
+        The interactive heatmap visualizes business density geographically across areas. Dynamic markers with
+        area tooltips allow users to click and filter leads by region instantly.
+        Example: <code>Satellite → 420 Businesses</code> · <code>Prahlad Nagar → 310</code> · <code>Naroda → 120</code>
+      </p>
+    </div>
+
+    <div class="heat-row">
+      <div class="heat-item low">
+        <div class="heat-color">🟢 Green</div>
+        <div class="heat-meaning">Low Density — Few businesses in this area</div>
+      </div>
+      <div class="heat-item medium">
+        <div class="heat-color">🟡 Yellow</div>
+        <div class="heat-meaning">Medium Density — Moderate business presence</div>
+      </div>
+      <div class="heat-item high">
+        <div class="heat-color">🔴 Red</div>
+        <div class="heat-meaning">High Density — Saturated business zone</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 12 — DATABASE
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">12</span>
+      <h2>Database Design</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Collection</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>users</td><td>User authentication and session management</td></tr>
+          <tr><td>leads</td><td>All scraped business lead records</td></tr>
+          <tr><td>crmPipeline</td><td>CRM stage tracking and workflow data</td></tr>
+          <tr><td>automationJobs</td><td>Automation job queue and progress tracking</td></tr>
+          <tr><td>analytics</td><td>Reporting metrics and aggregate statistics</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 13 — SECURITY
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">13</span>
+      <h2>Security Features</h2>
+    </div>
+    <div class="divider"></div>
+
+    <div class="security-grid">
+      <div class="security-chip">
+        <div class="sc-icon">🔐</div>
+        <div class="sc-text">JWT Authentication</div>
+      </div>
+      <div class="security-chip">
+        <div class="sc-icon">🛡️</div>
+        <div class="sc-text">Protected Routes</div>
+      </div>
+      <div class="security-chip">
+        <div class="sc-icon">💾</div>
+        <div class="sc-text">Session Persistence</div>
+      </div>
+      <div class="security-chip">
+        <div class="sc-icon">👑</div>
+        <div class="sc-text">Admin-Only Access</div>
+      </div>
+      <div class="security-chip">
+        <div class="sc-icon">🔒</div>
+        <div class="sc-text">Secure API Middleware</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 14 — PERFORMANCE
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">14</span>
+      <h2>Performance Optimizations</h2>
+    </div>
+    <div class="divider"></div>
+
+    <div class="perf-cols">
+      <div class="perf-col">
+        <h4>⚙️ Backend Optimizations</h4>
+        <ul>
+          <li>Queue-based scraping</li>
+          <li>Browser reuse across sessions</li>
+          <li>Retry handling for failed requests</li>
+          <li>Parallel multi-source extraction</li>
+          <li>Batched MongoDB writes</li>
+        </ul>
+      </div>
+      <div class="perf-col">
+        <h4>🖥️ Frontend Optimizations</h4>
+        <ul>
+          <li>Pagination for large datasets</li>
+          <li>Lazy rendering components</li>
+          <li>React Query cached APIs</li>
+          <li>Real-time sync with WS/polling</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECTION 15 — FINAL SUMMARY
+  ═══════════════════════════════════════════ -->
+  <div class="content-section">
+    <div class="section-title">
+      <span class="num">15</span>
+      <h2>Final Summary</h2>
+    </div>
+    <div class="divider"></div>
+
+    <div class="summary-block">
+      <h3>Enterprise-Grade Lead Intelligence Platform</h3>
+      <p>
+        Lead Finder AI Automation is a scalable, production-ready ecosystem capable of hyperlocal business scraping,
+        CRM workflow automation, real-time analytics, area-wise automation, multi-source lead discovery,
+        and business intelligence visualization.
+      </p>
+      <p>
+        Designed for sales agencies, marketing companies, business intelligence teams, and automated lead
+        generation operations — providing a modern SaaS-style architecture optimized for scalability,
+        real-time workflows, and production-grade performance.
+      </p>
+      <div class="summary-tags">
+        <span class="summary-tag">Hyperlocal Scraping</span>
+        <span class="summary-tag">CRM Automation</span>
+        <span class="summary-tag">Real-time Analytics</span>
+        <span class="summary-tag">Area Heatmaps</span>
+        <span class="summary-tag">Multi-source Discovery</span>
+        <span class="summary-tag">BI Visualization</span>
+        <span class="summary-tag">JWT Security</span>
+        <span class="summary-tag">Export Ready</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+       PROJECT SCREENSHOTS SECTION
+  ═══════════════════════════════════════════ -->
+  <div class="img-section-header">
+    <h2>Project Screenshots</h2>
+    <p>Visual walkthrough of all major modules and screens</p>
+  </div>
+
+  <!-- ─── 1) Login Page ─────────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>1) Login Page</h3>
+      <span class="folder-badge">Authentication</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <!--
+          INSTRUCTION: Replace the src below with your actual image path.
+          Example: src="1) Login Page/I1.png"
+        -->
+        <img src="1) Login Page/I1.png" alt="Login Page — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>1) Login Page / I1.png</span>
+        </div>
+        <div class="img-caption">Login Page · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="1) Login Page/I2.png" alt="Login Page — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>1) Login Page / I2.png</span>
+        </div>
+        <div class="img-caption">Login Page · I2.png</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 2) Dashboard ──────────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>2) Dashboard</h3>
+      <span class="folder-badge">Overview &amp; Stats</span>
+    </div>
+
+    <!-- images -->
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="2) Dashboard/I1.png" alt="Dashboard — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>2) Dashboard / I1.png</span>
+        </div>
+        <div class="img-caption">Dashboard · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="2) Dashboard/I2.png" alt="Dashboard — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>2) Dashboard / I2.png</span>
+        </div>
+        <div class="img-caption">Dashboard · I2.png</div>
+      </div>
+    </div>
+
+    <!-- images -->
+
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="2) Dashboard/I3.png" alt="Dashboard — Screenshot 3"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>2) Dashboard / I3.png</span>
+        </div>
+        <div class="img-caption">Dashboard · I3.png</div>
+      </div>
+
+      <div class="img-card">
+        <img src="2) Dashboard/I4.png" alt="Dashboard — Screenshot 3"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>2) Dashboard / I4.png</span>
+        </div>
+        <div class="img-caption">Dashboard · I4.png</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── 3) Search ─────────────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>3) Search</h3>
+      <span class="folder-badge">Scraping Engine</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="3) Search/I1.png" alt="Search — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>3) Search / I1.png</span>
+        </div>
+        <div class="img-caption">Search · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="3) Search/I2.png" alt="Search — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>3) Search / I2.png</span>
+        </div>
+        <div class="img-caption">Search · I2.png</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 4) Leads ──────────────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>4) Leads</h3>
+      <span class="folder-badge">Lead Management</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="4) Leads/I1.png" alt="Leads — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>4) Leads / I1.png</span>
+        </div>
+        <div class="img-caption">Leads · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="4) Leads/I2.png" alt="Leads — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>4) Leads / I2.png</span>
+        </div>
+        <div class="img-caption">Leads · I2.png</div>
+      </div>
+    </div>
+
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="4) Leads/I3.png" alt="Leads — Screenshot 3"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>4) Leads / I3.png</span>
+        </div>
+        <div class="img-caption">Leads · I3.png</div>
+      </div>
+
+      <div class="img-card">
+        <img src="4) Leads/I4.png" alt="Leads — Screenshot 3"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>4) Leads / I4.png</span>
+        </div>
+        <div class="img-caption">Leads · I4.png</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── 5) CRM Pipeline ───────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>5) CRM Pipeline</h3>
+      <span class="folder-badge">Workflow Stages</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="5) CRM Pipeline/I1.png" alt="CRM Pipeline — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>5) CRM Pipeline / I1.png</span>
+        </div>
+        <div class="img-caption">CRM Pipeline · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="5) CRM Pipeline/I2.png" alt="CRM Pipeline — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>5) CRM Pipeline / I2.png</span>
+        </div>
+        <div class="img-caption">CRM Pipeline · I2.png</div>
+      </div>
+    </div>
+
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="5) CRM Pipeline/I3.png" alt="CRM Pipeline — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>5) CRM Pipeline / I3.png</span>
+        </div>
+        <div class="img-caption">CRM Pipeline · I3.png</div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <!-- ─── 6) Analytics ──────────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>6) Analytics</h3>
+      <span class="folder-badge">Business Intelligence</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="6) Analytics/I1.png" alt="Analytics — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>6) Analytics / I1.png</span>
+        </div>
+        <div class="img-caption">Analytics · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="6) Analytics/I2.png" alt="Analytics — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>6) Analytics / I2.png</span>
+        </div>
+        <div class="img-caption">Analytics · I2.png</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 7) Automation ─────────────────────────── -->
+  <div class="img-page">
+
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>7) Automation</h3>
+      <span class="folder-badge">Auto Scraping Engine</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="7) Automation/I1.png" alt="Automation — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>7) Automation / I1.png</span>
+        </div>
+        <div class="img-caption">Automation · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="7) Automation/I2.png" alt="Automation — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>7) Automation / I2.png</span>
+        </div>
+        <div class="img-caption">Automation · I2.png</div>
+      </div>
+    </div>
+
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="7) Automation/I3.png" alt="Automation — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>7) Automation / I3.png</span>
+        </div>
+        <div class="img-caption">Automation · I3.png</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 8) Settings ───────────────────────────── -->
+  <div class="img-page">
+    <div class="img-folder-title">
+      <span class="folder-icon">📁</span>
+      <h3>8) Settings</h3>
+      <span class="folder-badge">Configuration</span>
+    </div>
+    <div class="img-grid">
+      <div class="img-card">
+        <img src="8) Settings/I1.png" alt="Settings — Screenshot 1"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>8) Settings / I1.png</span>
+        </div>
+        <div class="img-caption">Settings · I1.png</div>
+      </div>
+      <div class="img-card">
+        <img src="8) Settings/I2.png" alt="Settings — Screenshot 2"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div class="img-placeholder" style="display:none;">
+          <span class="ph-icon">🖼️</span>
+          <span>8) Settings / I2.png</span>
+        </div>
+        <div class="img-caption">Settings · I2.png</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       DOCUMENT FOOTER
+  ═══════════════════════════════════════════ -->
+  <div class="page-footer">
+    <span>Lead Finder AI Automation — Project Documentation · Ritesh Gajjar </span>
+  </div>
+
+</div><!-- /page -->
+</body>
+</html>

@@ -1,0 +1,775 @@
+================================================================================
+                    LEAD FINDER AGENT - BUSINESS LOGIC DOCUMENTATION
+================================================================================
+Project: Lead Finder Agent 
+
+================================================================================
+                              TABLE OF CONTENTS
+================================================================================
+
+1. LEAD SCORE LOGIC
+2. SEO SCORE LOGIC
+3. RESPONSIVE/UX SCORE LOGIC
+4. TRUST SCORE LOGIC
+5. BUSINESS OPPORTUNITY LOGIC
+6. WEBSITE QUALITY SCORE LOGIC
+7. LEAD QUALIFICATION LOGIC
+8. AI SALES INTELLIGENCE LOGIC
+9. OUTREACH & PROPOSAL LOGIC
+10. SCRAPING & DATA EXTRACTION LOGIC
+11. AREA AUTOMATION LOGIC
+12. CRM PIPELINE LOGIC
+13. ANALYTICS & REPORTING LOGIC
+
+================================================================================
+                           1. LEAD SCORE LOGIC
+================================================================================
+
+The system calculates lead scores using multiple engines with weighted factors.
+
+1.1 BASE LEAD SCORE CALCULATION (Scraper Level)
+------------------------------------------------
+Location: backend/src/source-core/base-source.ts
+
+Algorithm:
+- Start with base score: 30
+- Add points for:
+  - Has website: +20 points
+  - Has phone: +10 points
+  - Has email: +10 points
+  - High rating (≥4.5): +10 points
+  - Many reviews (≥50): +5 points
+- Maximum score: 100
+
+1.2 AI LEAD SCORE CALCULATION
+-----------------------------
+Location: backend/src/ai-sales-intelligence/lead-score-engine.ts
+
+Algorithm (Weighted Scoring):
+SEO (15% weight):
+  - Score = (seoScore / 100) * 15
+
+UI/UX (15% weight):
+  - Score = (uiuxScore / 100) * 15
+
+Responsive (15% weight):
+  - Score = (responsiveScore / 100) * 15
+
+Trust (15% weight):
+  - Score = (trustScore / 100) * 15
+
+Social Presence (10% weight):
+  - Score = (socialPresenceScore / 100) * 10
+
+Quality (10% weight):
+  - Score = (websiteQualityScore / 100) * 10
+
+Freshness (5% weight):
+  - Fresh: +5 points
+  - Moderate: +2.5 points
+
+Contact Methods (5% weight):
+  - Score = (contactMethods / 3) * 5
+
+Activity (10% weight):
+  - Activity Score = min(rating * 10, 5) + min(reviewsCount / 10, 5)
+  - Final = (activityScore / 10) * 10
+
+Final Score = Sum of all weighted components (capped at 0-100)
+
+1.3 LEAD QUALIFICATION LEVEL
+----------------------------
+Based on AI Lead Score:
+- High Potential: Score ≥ 85
+- Medium Potential: Score 60-84
+- Low Potential: Score < 60
+
+================================================================================
+                           2. SEO SCORE LOGIC
+================================================================================
+
+Location: backend/src/services/website-analyzer.service.ts
+
+2.1 SEO SCORE COMPONENTS (Max: 100 points)
+------------------------------------------
+Title Tag (20 points):
+  - 30-60 characters: 20 points
+  - Any length > 0: 10 points
+
+Meta Description (20 points):
+  - 120-160 characters: 20 points
+  - Any length > 0: 10 points
+
+Heading Structure (15 points):
+  - Exactly 1 H1: 15 points
+  - H1 present (any count): 10 points
+
+Image Alt Tags (15 points):
+  - All images have alt: 15 points
+  - Partial coverage: proportional score
+
+Internal Links (10 points):
+  - More than 5 internal links: 10 points
+  - 1-5 internal links: 5 points
+
+Mobile Friendly (10 points):
+  - Has viewport meta or responsive framework: 10 points
+
+SSL/HTTPS (10 points):
+  - HTTPS enabled: 10 points
+
+2.2 SEO QUALITY DETERMINATION
+-----------------------------
+- Excellent SEO: Score ≥ 80
+- Good SEO: Score 60-79
+- Average SEO: Score 40-59
+- Poor SEO: Score < 40
+
+================================================================================
+                      3. RESPONSIVE/UX SCORE LOGIC
+================================================================================
+
+Location: backend/src/uiux-intelligence/responsive-score-engine.ts
+
+3.1 RESPONSIVE SCORE (Max: 100 points)
+--------------------------------------
+Deductions:
+  - Missing viewport meta: -20 points
+  - Non-responsive layout: -25 points
+  - Horizontal scroll (desktop or mobile): -20 points
+  - Overflow issues: -10 points
+  - Font size issues: -10 points
+  - Off-screen elements > 5: -15 points (proportional)
+  - Fixed width elements > 3: -10 points (proportional)
+
+3.2 UI/UX SCORE (Max: 100 points)
+---------------------------------
+Critical issues: -15 points each
+Warning issues: -8 points each
+Info issues: -3 points each
+
+Additional deductions:
+  - Alignment issues: -5 points
+  - Broken buttons: -10 points
+  - Overlapping content: -10 points
+  - Navigation issues: -8 points
+  - Hidden content: -5 points
+  - Spacing issues: -5 points
+
+3.3 MOBILE EXPERIENCE SCORE (Max: 100 points)
+---------------------------------------------
+Deductions:
+  - Missing viewport meta: -25 points
+  - Not touch-friendly: -20 points
+  - Font size issues: -15 points
+  - Horizontal scroll (mobile): -20 points
+  - Off-screen elements > 3: -15 points
+  - Mobile layout broken: -20 points
+  - Mobile-specific issues: -5 points each
+
+3.4 SCORE LEVELS
+----------------
+- Good: ≥ 80 points
+- Medium: 50-79 points
+- Poor: < 50 points
+
+================================================================================
+                         4. TRUST SCORE LOGIC
+================================================================================
+
+Location: backend/src/business-intelligence/trust-score-engine.ts
+
+4.1 TRUST SCORE FACTORS (Max: 100 points)
+-----------------------------------------
+Mandatory factors:
+  - SSL/HTTPS enabled: +20 points
+  - Contact presence (≥2 methods): +15 points
+  - Social presence (score ≥ 40): +15 points
+  - SEO quality (score ≥ 60): +10 points
+  - Responsiveness (score ≥ 70): +10 points
+  - Copyright fresh (not stale): +15 points
+  - Business transparency (complete footer): +15 points
+
+Optional bonuses:
+  - Privacy policy present: +5 points
+  - Terms page present: +5 points
+  - Contact form present: +5 points
+  - Google Maps embed: +5 points
+
+4.2 TRUST LEVELS
+----------------
+- High Trust: Score ≥ 75
+- Medium Trust: Score 50-74
+- Low Trust: Score < 50
+
+================================================================================
+                      5. BUSINESS OPPORTUNITY LOGIC
+================================================================================
+
+Location: backend/src/business-intelligence/opportunity-engine.ts
+
+5.1 OPPORTUNITY DETECTION FACTORS
+---------------------------------
+- Poor SEO (score < 50): +15 points
+- Outdated UI (UI/UX score < 60): +20 points
+- Not mobile-responsive (score < 70): +15 points
+- Weak social presence (score < 40): +10 points
+- No SSL certificate: +10 points
+- Missing contact form: +10 points
+- Outdated copyright: +10 points
+- Low trust score (score < 50): +15 points
+- Overall low quality (score < 60): +15 points
+- Very outdated website: +20 points
+- Website needs refresh: +10 points
+
+5.2 OPPORTUNITY LEVELS
+----------------------
+- High Opportunity: Score ≥ 70 (estimated value: high)
+- Medium Opportunity: Score 40-69 (estimated value: medium)
+- Low Opportunity: Score < 40 (estimated value: low)
+
+5.3 RECOMMENDATION LOGIC
+------------------------
+High: "Strong redesign candidate with X major improvement areas. High-value opportunity."
+Medium: "Moderate opportunity with X improvement areas. Consider targeted upgrades."
+Low: "Low priority opportunity. Website has X minor issues but overall acceptable quality."
+
+================================================================================
+                    6. WEBSITE QUALITY SCORE LOGIC
+================================================================================
+
+Location: backend/src/business-intelligence/website-quality-engine.ts
+
+6.1 WEIGHTED QUALITY SCORE
+--------------------------
+Breakdown (all 0-100):
+  - SEO: 20% weight
+  - Responsiveness: 20% weight
+  - UI/UX: 20% weight
+  - Trust: 15% weight
+  - Performance: 15% weight
+  - Social Presence: 10% weight
+
+Overall Score = (SEO * 0.20) + (Responsive * 0.20) + (UIUX * 0.20) +
+                (Trust * 0.15) + (Performance * 0.15) + (Social * 0.10)
+
+6.2 PERFORMANCE SCORE
+---------------------
+Response time < 1s: 100 points
+Response time < 2s: 90 points
+Response time < 3s: 75 points
+Response time < 5s: 60 points
+Response time < 10s: 40 points
+Response time ≥ 10s: 20 points
+Response time = 0 (failed): 0 points
+
+================================================================================
+                      7. LEAD QUALIFICATION LOGIC
+================================================================================
+
+Location: backend/src/services/website-analyzer.service.ts
+
+7.1 WEBSITE STATUS DETERMINATION
+--------------------------------
+Based on issues count and quality score:
+
+- No Website: Issues ≥ 3 OR responseTime = 0
+- Broken Website: Issues ≥ 2 OR qualityScore < 30
+- Outdated Website: qualityScore < 60 OR no modern structure OR no contact page
+- Average Website: qualityScore < 80 OR no SSL
+- Modern Website: All checks pass
+
+7.2 QUALIFICATION LEVEL FROM SCORE
+----------------------------------
+- High Potential: Score ≥ 85 (website good, needs no improvement)
+- Medium Potential: Score 60-84 (some improvements needed)
+- Low Potential: Score < 60 (significant improvements needed)
+
+Note: Higher scores = better quality websites (lower opportunity)
+      Lower scores = worse quality websites (higher opportunity for services)
+
+================================================================================
+                   8. AI SALES INTELLIGENCE LOGIC
+================================================================================
+
+Location: backend/src/ai-sales-intelligence/
+
+8.1 REDesign POTENTIAL ASSESSMENT
+---------------------------------
+Location: backend/src/ai-sales-intelligence/redesign-potential-engine.ts
+
+Factors:
+  - Responsive score < 50: +20 points
+  - Responsive score < 70: +10 points
+  - UI/UX score < 50: +20 points
+  - UI/UX score < 70: +10 points
+  - Missing viewport meta: +10 points
+  - Not mobile-friendly: +10 points
+  - Horizontal scroll: +10 points
+  - Very outdated website: +15 points
+  - Outdated website: +10 points
+  - Old design (2018 or earlier): +10 points
+  - Broken buttons: +5 points
+  - Cropped sections: +5 points
+  - Navigation issues: +5 points
+  - Copyright > 2 years old: +10 points
+
+Levels:
+  - High: Score ≥ 60
+  - Medium: Score 30-59
+  - Low: Score < 30
+
+8.2 CONVERSION PROBABILITY
+--------------------------
+Based on:
+  - Trust score
+  - Website quality
+  - SEO quality
+  - Mobile responsiveness
+  - Social presence
+
+Levels: Low, Medium, High
+
+8.3 REVENUE POTENTIAL
+---------------------
+Based on:
+  - Business size indicators
+  - Industry type
+  - Market opportunity
+  - Competition level
+  - Website quality
+
+Levels: Low, Medium, High, Enterprise
+
+8.4 SALES PRIORITY
+------------------
+Based on:
+  - Conversion probability
+  - Revenue potential
+  - Timeline factors
+  - Market urgency
+
+Levels: Low, Medium, High, Urgent
+
+================================================================================
+                     9. OUTREACH & PROPOSAL LOGIC
+================================================================================
+
+Location: backend/src/ai-outreach/
+
+9.1 AI PITCH GENERATION
+-----------------------
+Location: backend/src/ai-outreach/ai-pitch-generator.ts
+
+Strengths Detection:
+  - Strong ratings (≥4.0) and reviews
+  - Active engagement (≥50 reviews)
+  - High trust signals (≥70)
+  - Decent social presence (≥60)
+  - Good responsive design (≥70)
+  - Solid website quality (≥70)
+  - High AI lead potential (≥70)
+
+Weaknesses Detection:
+  - Mobile optimization needs
+  - Poor responsive score (<50)
+  - SEO improvement opportunity (high)
+  - Below average website quality (<50)
+  - Outdated website technology
+  - Weak social media footprint
+
+Maturity Label:
+  - Advanced: AI score ≥ 70 OR Trust ≥ 70
+  - Developing: AI score ≥ 40 OR Trust ≥ 40
+  - Basic: Otherwise
+
+Service Focus:
+  - Responsive redesign: responsiveScore < 50
+  - SEO optimization: seoOpportunity = high
+  - Quality improvement: qualityScore < 50
+  - Social media growth: socialScore < 40
+  - Comprehensive strategy: Otherwise
+
+9.2 FOLLOW-UP SEQUENCE GENERATION
+---------------------------------
+Location: backend/src/ai-outreach/followup-sequence-engine.ts
+
+Sequence stages with delays:
+  - Stage 1: Initial email/WhatsApp (immediate)
+  - Stage 2: Follow-up (3 days delay)
+  - Stage 3: Value proposition (5 days delay)
+  - Stage 4: Social proof (7 days delay)
+  - Stage 5: Limited offer (10 days delay)
+
+9.3 WHATSAPP MESSAGE GENERATION
+-------------------------------
+Location: backend/src/ai-outreach/whatsapp-message-engine.ts
+
+Message types:
+  - Introduction
+  - Value proposition
+  - Case study
+  - Limited offer
+  - Follow-up
+
+9.4 SEO PROPOSAL GENERATION
+---------------------------
+Location: backend/src/ai-outreach/seo-proposal-engine.ts
+
+Services included:
+  - Keyword research
+  - On-page optimization
+  - Content strategy
+  - Link building
+  - Performance monitoring
+
+Timeline: 3-6 months
+Investment: Based on business size and competition
+
+================================================================================
+                  10. SCRAPING & DATA EXTRACTION LOGIC
+================================================================================
+
+Location: backend/src/services/scraper.service.ts
+          backend/src/source-manager/
+
+10.1 MULTI-SOURCE SCRAPING
+--------------------------
+Sources: Google Maps, JustDial, IndiaMart, Clutch
+
+Process:
+1. Build search query: "{businessType} in {area}, {city}, {state}"
+2. Execute concurrent scrapes across all selected sources
+3. De-duplicate based on company name + phone
+4. Extract leads with metadata
+5. Calculate initial lead scores
+6. Store in database
+
+10.2 DATA EXTRACTION FIELDS
+---------------------------
+- Company Name (required)
+- Website
+- Phone
+- Email
+- Address
+- Category/Industry
+- Rating (0-5)
+- Reviews Count
+- Source URL
+- Source Metadata (JSON)
+
+10.3 LEAD STORE PROCESS
+-----------------------
+1. Check for duplicate (companyName + phone)
+2. If new: Create new lead document
+3. If existing: Update with new data (merge strategy)
+4. Trigger lead audit process (responsive + intelligence)
+5. Return stored lead ID
+
+================================================================================
+                     11. AREA AUTOMATION LOGIC
+================================================================================
+
+Location: backend/src/automation/
+
+11.1 SESSION INITIALIZATION
+---------------------------
+Engine: AreaAutomationEngine
+
+Process:
+1. Generate session UUID
+2. Iterate cities → areas using AreaIterator
+3. Create jobs for each (city, area, businessType) combination
+4. Insert jobs into queue with position tracking
+5. Start queue processing
+
+11.2 JOB PROCESSING
+-------------------
+Queue: AreaAutomationQueue
+
+Process per job:
+1. Mark job as running
+2. Execute scrape with sources, keyword (businessType), location
+3. Update job with results (totalLeads, sourceResults)
+4. Update session counters (totalLeads, completedJobs)
+5. Mark job as completed
+6. Process next job in queue
+
+11.3 STOP MECHANISM
+-------------------
+1. Set stopRequested flag for session
+2. Wait for current job to complete
+3. Mark remaining pending/running jobs as skipped
+4. Set session status to completed
+
+11.4 RESUME MECHANISM
+---------------------
+1. Find skipped jobs for session
+2. Reset skipped jobs to pending status
+3. Reset session status to running
+4. Re-enter same processing loop
+
+================================================================================
+                      12. CRM PIPELINE LOGIC
+================================================================================
+
+Location: backend/src/controllers/crm.controller.ts
+
+12.1 PIPELINE STAGES
+--------------------
+1. new-lead → Initial lead entry
+2. contacted → First contact attempt
+3. interested → Shows interest in services
+4. not-interested → Declines services
+5. follow-up → Scheduled follow-up
+6. meeting-scheduled → Meeting arranged
+7. proposal-sent → Proposal delivered
+8. negotiation → Discussion on terms
+9. deal-won → Successfully closed
+10. deal-lost → Lost opportunity
+
+12.2 STAGE TRANSITIONS
+----------------------
+- Interest = "interested" → interested stage
+- Interest = "not-interested" → not-interested stage
+- Interest = "maybe-later" → follow-up stage
+- Contact = "contacted" (no interest set) → contacted stage
+- Follow-up date set (no contact/interest) → follow-up stage
+- Proposal = "pending/sent" → proposal-sent stage
+- Proposal = "approved" → negotiation stage
+- Proposal = "rejected" → deal-lost stage
+- Meeting = "scheduled" → meeting-scheduled stage
+
+12.3 LEAD PRIORITY
+------------------
+Based on:
+  - Lead score
+  - Conversion probability
+  - Revenue potential
+  - Sales priority (AI)
+
+================================================================================
+                   13. ANALYTICS & REPORTING LOGIC
+================================================================================
+
+Location: backend/src/controllers/analytics.controller.ts
+
+13.1 KEY METRICS
+----------------
+- Total Leads: Count of all leads
+- High Potential: Leads with qualificationLevel = 'high-potential'
+- Emails Extracted: Leads with email field populated
+- Automation Runs: Completed automation sessions
+- Scraping Success Rate: (extracted - duplicates) / extracted
+- Websites Without SSL: Leads with sslEnabled = false
+- Exports Generated: Total CSV/Excel exports
+
+13.2 RESPONSIVE METRICS
+-----------------------
+- Audited: Leads with responsiveAuditCompleted = true
+- Average Responsive Score: Mean of all responsiveScore values
+- Average UI/UX Score: Mean of all uiuxScore values
+- Mobile Unfriendly: Leads with responsiveAudit.mobileFriendly = false
+
+13.3 INTELLIGENCE METRICS
+-------------------------
+- Analyzed: Leads with intelligenceCompleted = true
+- Average Trust Score: Mean of all trustScore values
+- Average Quality Score: Mean of all websiteQualityScore values
+- High Opportunity: Business opportunity level = 'high'
+- Outdated Designs: Freshness status = 'outdated' or 'very-outdated'
+
+13.4 AREA ANALYTICS
+-------------------
+- Area Density: Lead counts per area (for heatmap)
+- Top Areas: Highest lead-generating areas
+- State-wise distribution: Leads per state
+
+================================================================================
+                           FILE STRUCTURE REFERENCE
+================================================================================
+
+BACKEND CORE FILES:
+-------------------
+backend/src/models/Lead.ts                    # Lead schema with all fields
+backend/src/automation/area-automation-engine.ts
+backend/src/automation/area-automation-queue.ts
+backend/src/services/scraper.service.ts
+backend/src/services/lead.service.ts
+backend/src/services/lead-audit-processor.service.ts
+
+AI & ANALYSIS:
+--------------
+backend/src/ai-sales-intelligence/lead-score-engine.ts
+backend/src/ai-sales-intelligence/redesign-potential-engine.ts
+backend/src/ai-outreach/ai-pitch-generator.ts
+backend/src/ai-outreach/followup-sequence-engine.ts
+backend/src/ai-outreach/whatsapp-message-engine.ts
+backend/src/ai-outreach/seo-proposal-engine.ts
+
+BUSINESS INTELLIGENCE:
+---------------------
+backend/src/business-intelligence/business-intelligence-engine.ts
+backend/src/business-intelligence/trust-score-engine.ts
+backend/src/business-intelligence/opportunity-engine.ts
+backend/src/business-intelligence/website-quality-engine.ts
+backend/src/business-intelligence/footer-analyzer.ts
+backend/src/business-intelligence/social-detector.ts
+backend/src/business-intelligence/contact-detector.ts
+backend/src/business-intelligence/freshness-detector.ts
+
+RESPONSIVE AUDIT:
+---------------
+backend/src/uiux-intelligence/responsive-score-engine.ts
+backend/src/services/responsive-audit.service.ts
+backend/src/services/website-analyzer.service.ts
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================
+================================================================================
+                         ADDITIONAL SEO ANALYSIS DETAILS
+================================================================================
+
+================================================================================
+                         SEO DETAILED CALCULATION
+================================================================================
+
+TITLE TAG ANALYSIS (20 points possible):
+----------------------------------------
+- Length 30-60 characters: 20 points
+- Length 1-29 characters: 10 points  
+- Length 61+ characters: 0 points (too long)
+- No title tag: 0 points
+
+META DESCRIPTION ANALYSIS (20 points possible):
+-----------------------------------------------
+- Length 120-160 characters: 20 points
+- Length 1-119 characters: 10 points
+- Length 161+ characters: 0 points (too long)
+- No meta description: 0 points
+
+HEADING STRUCTURE ANALYSIS (15 points possible):
+------------------------------------------------
+- Exactly 1 H1 tag: 15 points
+- 2+ H1 tags: 10 points (multiple H1s is not ideal)
+- No H1 tag: 0 points
+
+IMAGE ALT TAGS ANALYSIS (15 points possible):
+---------------------------------------------
+- All images have alt attributes: 15 points
+- Partial coverage: Proportional score (images with alt / total images * 15)
+- No images: 0 points (no penalty for no images)
+
+INTERNAL LINKS ANALYSIS (10 points possible):
+---------------------------------------------
+- 6+ internal links: 10 points
+- 1-5 internal links: 5 points
+- No internal links: 0 points
+
+MOBILE FRIENDLINESS (10 points possible):
+-----------------------------------------
+- Has viewport meta tag: 5 points
+- Has Bootstrap/Tailwind/Foundation: 5 points
+- Has mobile web app meta tags: 5 points
+- Any mobile indicator present: 10 points total
+- No mobile indicators: 0 points
+
+SSL/HTTPS ANALYSIS (10 points possible):
+----------------------------------------
+- HTTPS enabled: 10 points
+- HTTP only (no SSL): 0 points
+
+================================================================================
+                              SEO GRADE SCALE
+================================================================================
+
+SEO Score Range | Grade      | Quality Assessment
+----------------|------------|----------------------------------
+90-100          | Excellent  | Exceptional SEO implementation
+80-89           | Very Good  | Strong SEO with minor improvements
+70-79           | Good       | Good SEO but room for improvement
+60-69           | Fair       | Average SEO needs enhancement
+50-59           | Below Avg  | Poor SEO requires attention
+0-49            | Poor       | Critical SEO issues detected
+
+================================================================================
+                         QUICK SEO CHECKLIST (Manual)
+================================================================================
+
+✓ Title tag between 30-60 characters
+✓ Meta description between 120-160 characters
+✓ Exactly one H1 tag on page
+✓ All images have descriptive alt attributes
+✓ At least 5+ internal links
+✓ Mobile responsive (viewport meta tag)
+✓ HTTPS/SSL certificate installed
+
+If all checks pass: SEO Score = 100 (Excellent)
+If most checks pass: SEO Score = 70-90 (Good)
+If some checks pass: SEO Score = 40-69 (Fair)
+If few checks pass: SEO Score = 0-39 (Poor)
+
+================================================================================
+                    WEBSITE STATUS DETERMINATION
+================================================================================
+
+Website Status Logic:
+
+1. NO WEBSITE
+   - Response timeout (>15s)
+   - Connection refused
+   - DNS not found
+   - Issues count >= 3
+
+2. BROKEN WEBSITE
+   - Quality score < 30
+   - Issues count >= 2
+   - Page doesn't load properly
+
+3. OUTDATED WEBSITE
+   - Quality score < 60
+   - No contact page
+   - No SSL (HTTP)
+   - Old design patterns
+   - Missing modern HTML5 elements
+
+4. AVERAGE WEBSITE
+   - Quality score < 80
+   - Has SSL but not perfect
+   - Has contact page but basic
+   - Some outdated elements
+
+5. MODERN WEBSITE
+   - Quality score >= 80
+   - SSL enabled
+   - Contact page present
+   - Modern HTML5 structure
+   - Responsive design
+   - Social links present
+
+================================================================================
+                    LEAD QUALIFICATION OVERVIEW
+================================================================================
+
+Lead qualifies as HIGH POTENTIAL if:
+  - Website quality score >= 80, OR
+  - Has professional website design, OR
+  - Strong social presence, OR
+  - Good SEO implementation
+
+Lead qualifies as MEDIUM POTENTIAL if:
+  - Website quality score 60-79, OR
+  - Has some modern elements, OR
+  - Basic online presence
+
+Lead qualifies as LOW POTENTIAL if:
+  - Website quality score < 60, OR
+  - No website or broken website, OR
+  - Very outdated design
+
+Note: Lower quality scores = HIGHER opportunity for digital services
+
+================================================================================
+                           END OF ADDITIONS
+================================================================================

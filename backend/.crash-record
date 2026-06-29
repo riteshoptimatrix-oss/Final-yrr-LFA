@@ -1,0 +1,21 @@
+{
+  "type": "Uncaught Exception",
+  "timestamp": "2026-06-29T06:36:08.915Z",
+  "crashCount": 2257819,
+  "uptime": 1094.747074534,
+  "memory": {
+    "rss": "1202MB",
+    "heapTotal": "1297MB",
+    "heapUsed": "1225MB",
+    "external": "29MB"
+  },
+  "nodeVersion": "v26.3.1",
+  "platform": "linux",
+  "arch": "x64",
+  "env": "production",
+  "error": {
+    "name": "Error",
+    "message": "EIO: i/o error, write",
+    "stack": "Error: EIO: i/o error, write"
+  }
+}
